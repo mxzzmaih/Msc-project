@@ -12,7 +12,7 @@ export default function HomePage() {
         <Text size="3">Here are your notes:</Text>
       </Flex>
 
-      {/* Embed the entire LinearPage below */}
+      {/* now this will render your sidebar + grid (including the + New note button) */}
       <LinearPage />
     </>
   );

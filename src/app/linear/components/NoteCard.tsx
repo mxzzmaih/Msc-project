@@ -1,4 +1,3 @@
-// src/app/linear/components/NoteCard.tsx
 "use client";
 
 import {
@@ -12,10 +11,11 @@ import { Text } from "@radix-ui/themes";
 
 export interface Note {
   id: string;
+  folder: string;
   year: number;
   title: string;
   description: string;
-  categoryColor: string; // e.g. "bg-red-400"
+  categoryColor: string;
 }
 
 export default function NoteCard({ note }: { note: Note }) {

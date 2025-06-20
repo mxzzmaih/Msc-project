@@ -1,24 +1,20 @@
-// src/app/linear/components/NotesSidebar.tsx
 "use client";
 
-import { Button, Flex, Text } from "@radix-ui/themes";
-
-const folders = ["All notes", "Collections", "Projects", "Archives"];
+import { Flex, Text } from "@radix-ui/themes";
+import { Button } from "@/components/ui/button";
 
 export default function NotesSidebar() {
   return (
     <Flex direction="column" className="h-full p-4" gap="4">
-      <Text size="4" className="font-bold">Library</Text>
-      <nav className="space-y-2">
-        {folders.map((name) => (
-          <Text key={name} className="cursor-pointer hover:underline">
-            {name}
-          </Text>
-        ))}
-      </nav>
+      <Text size="4" className="font-bold">
+        Library
+      </Text>
 
+      {/* here’s your “+ New note” button, always visible */}
       <div className="mt-auto">
-        <Button size="2" className="w-full">+ New note</Button>
+        <Button className="w-full" size="sm">
+          + New note
+        </Button>
       </div>
     </Flex>
   );
