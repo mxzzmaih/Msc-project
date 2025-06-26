@@ -6,7 +6,8 @@ import "@radix-ui/themes/styles.css";
 import "./globals.css";
 import { Theme as RadixTheme } from "@radix-ui/themes";
 import { MantineProvider } from "@mantine/core";
-import { Toaster } from "sonner"; // just this import, no diff markers
+import { ThemeProvider } from "next-themes";
+import { Toaster } from "sonner";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -20,18 +21,15 @@ const geistMono = Geist_Mono({
 
 export function Providers({ children }: { children: React.ReactNode }) {
   return (
-    <html
-      lang="en"
-      className={`${geistSans.variable} ${geistMono.variable} light`}
-    >
-      <body className="antialiased">
-        <MantineProvider defaultColorScheme="light">
-          <RadixTheme>
+    <div className={`${geistSans.variable} ${geistMono.variable}`}>
+      <MantineProvider defaultColorScheme="light">
+        <RadixTheme>
+          <ThemeProvider attribute="class" defaultTheme="light">
             {children}
             <Toaster richColors />
-          </RadixTheme>
-        </MantineProvider>
-      </body>
-    </html>
+          </ThemeProvider>
+        </RadixTheme>
+      </MantineProvider>
+    </div>
   );
 }
