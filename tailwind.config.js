@@ -4,7 +4,7 @@ module.exports = {
   content: [
     "./src/app/**/*.{js,ts,jsx,tsx}",
     "./src/pages/**/*.{js,ts,jsx,tsx}",
-    "./src/components/**/*.{js,ts,jsx,tsx}"
+    "./src/components/**/*.{js,ts,jsx,tsx}",
   ],
   theme: {
     extend: {
@@ -13,6 +13,7 @@ module.exports = {
         'fade-in-up': 'fadeInUp 0.5s ease-out',
         'fade-in-left': 'fadeInLeft 0.5s ease-out',
         'slide-down': 'slideDown 0.5s ease-out',
+        'background-pan': 'pan 20s linear infinite',
       },
       keyframes: {
         fadeIn: {
@@ -31,8 +32,12 @@ module.exports = {
           '0%': { opacity: '0', transform: 'translateY(-10px)' },
           '100%': { opacity: '1', transform: 'translateY(0)' },
         },
+        pan: {
+          '0%': { backgroundPosition: '0% 0%' },
+          '100%': { backgroundPosition: '100% 100%' },
+        },
       },
     },
   },
   plugins: [],
-}
+};
