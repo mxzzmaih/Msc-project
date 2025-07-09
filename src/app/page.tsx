@@ -1,6 +1,7 @@
+// HomePage.tsx
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect } from "react";
 import { ArrowRight } from "lucide-react";
 import LinearPage from "./linear/components/linearpage";
 
