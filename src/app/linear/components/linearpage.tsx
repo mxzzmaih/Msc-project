@@ -1,15 +1,6 @@
-import React, { useState, useEffect, useCallback } from 'react';
-import { Plus, FileText, Search, MoreHorizontal, ArrowLeft, Share2 } from 'lucide-react';
-import ReactFlow, {
-  Controls,
-  MiniMap,
-  Background,
-  useNodesState,
-  useEdgesState,
-  addEdge,
-  BackgroundVariant
-} from 'reactflow';
-import 'reactflow/dist/style.css';
+import React, { useState, useEffect, useRef } from 'react';
+import { Plus, FileText, Search, MoreHorizontal, ArrowLeft, Share2, X, Menu } from 'lucide-react';
+import MindMapPage from './mindmap';
 
 interface Note {
   id: number;
@@ -22,214 +13,7 @@ interface LinearPageProps {
   onBack?: () => void;
 }
 
-// Mind Map Component (exported from the original code)
-const MindMapPage = ({ onBack }: { onBack?: () => void }) => {
-  const initialNodes = [
-    {
-      id: '1',
-      type: 'default',
-      position: { x: 250, y: 250 },
-      data: { label: 'Main Idea' },
-      style: {
-        background: '#6366f1',
-        color: 'white',
-        border: '2px solid #4f46e5',
-        borderRadius: '8px',
-        fontSize: '16px',
-        fontWeight: 'bold',
-        padding: '10px',
-      },
-    },
-    {
-      id: '2',
-      type: 'default',
-      position: { x: 100, y: 100 },
-      data: { label: 'Branch 1' },
-      style: {
-        background: '#10b981',
-        color: 'white',
-        border: '2px solid #059669',
-        borderRadius: '8px',
-        fontSize: '14px',
-        padding: '8px',
-      },
-    },
-    {
-      id: '3',
-      type: 'default',
-      position: { x: 400, y: 100 },
-      data: { label: 'Branch 2' },
-      style: {
-        background: '#f59e0b',
-        color: 'white',
-        border: '2px solid #d97706',
-        borderRadius: '8px',
-        fontSize: '14px',
-        padding: '8px',
-      },
-    },
-  ];
-
-  const initialEdges = [
-    {
-      id: 'e1-2',
-      source: '1',
-      target: '2',
-      type: 'smoothstep',
-      style: { stroke: '#6366f1', strokeWidth: 2 },
-    },
-    {
-      id: 'e1-3',
-      source: '1',
-      target: '3',
-      type: 'smoothstep',
-      style: { stroke: '#6366f1', strokeWidth: 2 },
-    },
-  ];
-
-  const colors = [
-    '#6366f1',
-    '#10b981',
-    '#f59e0b',
-    '#ef4444',
-    '#8b5cf6',
-    '#06b6d4',
-  ];
-
-  const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes as any[]);
-  const [edges, setEdges, onEdgesChange] = useEdgesState(initialEdges as any[]);
-  const [nodeId, setNodeId] = useState<number>(4);
-
-  const onConnect = useCallback((params: any): void => {
-    setEdges((eds: any[]) => addEdge(params, eds));
-  }, [setEdges]);
-
-  const addNode = useCallback((): void => {
-    const newNode = {
-      id: nodeId.toString(),
-      type: 'default',
-      position: {
-        x: Math.random() * 400 + 100,
-        y: Math.random() * 400 + 100,
-      },
-      data: { label: `Node ${nodeId}` },
-      style: {
-        background: colors[Math.floor(Math.random() * colors.length)],
-        color: 'white',
-        border: '2px solid #374151',
-        borderRadius: '8px',
-        fontSize: '14px',
-        padding: '8px',
-      },
-    };
-    setNodes((nds: any[]) => nds.concat(newNode));
-    setNodeId((id) => id + 1);
-  }, [nodeId, setNodes]);
-
-  const onNodeDoubleClick = useCallback(
-    (event: React.MouseEvent, node: any): void => {
-      const newLabel = prompt('Enter new label:', node.data.label);
-      if (newLabel !== null) {
-        setNodes((nds: any[]) =>
-          nds.map((n: any) =>
-            n.id === node.id
-              ? { ...n, data: { ...n.data, label: newLabel } }
-              : n
-          )
-        );
-      }
-    },
-    [setNodes]
-  );
-
-  const deleteNode = useCallback((id: string): void => {
-    setNodes((nds: any[]) => nds.filter((n: any) => n.id !== id));
-    setEdges((eds: any[]) =>
-      eds.filter((e: any) => e.source !== id && e.target !== id)
-    );
-  }, [setNodes, setEdges]);
-
-  const onNodeContextMenu = useCallback(
-    (event: React.MouseEvent, node: any): void => {
-      event.preventDefault();
-      if (confirm('Delete this node?')) {
-        deleteNode(node.id);
-      }
-    },
-    [deleteNode]
-  );
-
-  return (
-    <div style={{ width: '100vw', height: '100vh' }}>
-      {/* toolbar */}
-      <div style={{
-        position: 'absolute', top: 10, left: 10, zIndex: 1000,
-        background: 'white', padding: '10px', borderRadius: '8px',
-        boxShadow: '0 2px 10px rgba(0,0,0,0.1)'
-      }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '10px' }}>
-          {onBack && (
-            <button
-              onClick={onBack}
-              style={{
-                background: '#6b7280', color: 'white', border: 'none',
-                padding: '8px 12px', borderRadius: '4px', cursor: 'pointer',
-                fontSize: '14px',
-              }}
-            >
-              ← Back
-            </button>
-          )}
-          <h1 style={{ margin: 0, fontSize: '20px', color: '#374151' }}>
-            Mind Map
-          </h1>
-        </div>
-        <button
-          onClick={addNode}
-          style={{
-            background: '#6366f1', color: 'white', border: 'none',
-            padding: '8px 16px', borderRadius: '4px', cursor: 'pointer',
-            fontSize: '14px',
-          }}
-        >
-          Add Node
-        </button>
-        <div style={{ marginTop: '10px', fontSize: '12px', color: '#6b7280' }}>
-          • Double-click nodes to edit<br />
-          • Right-click to delete<br />
-          • Drag to connect nodes
-        </div>
-      </div>
-
-      <ReactFlow
-        nodes={nodes}
-        edges={edges}
-        onNodesChange={onNodesChange}
-        onEdgesChange={onEdgesChange}
-        onConnect={onConnect}
-        onNodeDoubleClick={onNodeDoubleClick}
-        onNodeContextMenu={onNodeContextMenu}
-        connectionLineStyle={{ stroke: '#6366f1', strokeWidth: 2 }}
-        defaultEdgeOptions={{
-          type: 'smoothstep',
-          style: { stroke: '#6366f1', strokeWidth: 2 },
-        }}
-        fitView
-        attributionPosition="bottom-right"
-      >
-        <Controls />
-        <MiniMap
-          nodeColor={(n: any) => n.style?.background || '#6366f1'}
-          style={{ background: '#f8fafc', border: '1px solid #e2e8f0' }}
-        />
-        <Background variant={BackgroundVariant.Dots} gap={20} size={1} />
-      </ReactFlow>
-    </div>
-  );
-};
-
 const LinearPage: React.FC<LinearPageProps> = ({ onBack }) => {
-  // Create initial note once to avoid ID mismatch
   const initialNote: Note = {
     id: Date.now(),
     title: '',
@@ -242,20 +26,38 @@ const LinearPage: React.FC<LinearPageProps> = ({ onBack }) => {
   const [searchTerm, setSearchTerm] = useState<string>('');
   const [showDeleteMenu, setShowDeleteMenu] = useState<number | null>(null);
   const [showMindMap, setShowMindMap] = useState<boolean>(false);
+  const [sidebarOpen, setSidebarOpen] = useState<boolean>(true);
+  const [isSearchFocused, setIsSearchFocused] = useState<boolean>(false);
+  const [animatingNotes, setAnimatingNotes] = useState<Set<number>>(new Set());
+  const searchInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    const handleClickOutside = () => {
-      setShowDeleteMenu(null);
+    const handleClickOutside = (e: MouseEvent) => {
+      if (showDeleteMenu && !(e.target as Element).closest('.delete-menu')) {
+        setShowDeleteMenu(null);
+      }
     };
 
     document.addEventListener('click', handleClickOutside);
     return () => document.removeEventListener('click', handleClickOutside);
-  }, []);
+  }, [showDeleteMenu]);
 
-  // If showing mind map, render it instead
-  if (showMindMap) {
-    return <MindMapPage onBack={() => setShowMindMap(false)} />;
-  }
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.ctrlKey || e.metaKey) {
+        if (e.key === 'n') {
+          e.preventDefault();
+          createNewNote();
+        } else if (e.key === 'k') {
+          e.preventDefault();
+          searchInputRef.current?.focus();
+        }
+      }
+    };
+
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, []);
 
   const activeNote: Note | undefined = notes.find(note => note.id === activeNoteId);
 
@@ -268,18 +70,26 @@ const LinearPage: React.FC<LinearPageProps> = ({ onBack }) => {
     };
     setNotes([newNote, ...notes]);
     setActiveNoteId(newNote.id);
+    
+    // Animate new note
+    setAnimatingNotes(prev => new Set(prev).add(newNote.id));
+    setTimeout(() => {
+      setAnimatingNotes(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(newNote.id);
+        return newSet;
+      });
+    }, 600);
   };
 
   const deleteNote = (noteId: number): void => {
     const remainingNotes = notes.filter(note => note.id !== noteId);
     setNotes(remainingNotes);
     
-    // If we deleted the active note, select another one or clear selection
     if (activeNoteId === noteId) {
       if (remainingNotes.length > 0) {
         setActiveNoteId(remainingNotes[0].id);
       } else {
-        // Create a new note if no notes remain
         const newNote: Note = {
           id: Date.now(),
           title: '',
@@ -323,74 +133,110 @@ const LinearPage: React.FC<LinearPageProps> = ({ onBack }) => {
     }
   };
 
+  // Show MindMap if requested
+  if (showMindMap) {
+    return <MindMapPage onBack={() => setShowMindMap(false)} />;
+  }
+
   return (
-    <div className="flex h-screen bg-white">
+    <div className="flex h-screen bg-gradient-to-br from-gray-50 to-gray-100 font-sans overflow-hidden">
       {/* Sidebar */}
-      <div className="w-64 bg-gray-50 border-r border-gray-200 flex flex-col">
+      <div className={`${sidebarOpen ? 'w-80' : 'w-0'} transition-all duration-500 ease-in-out transform ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'} bg-white/90 backdrop-blur-md border-r border-gray-200/50 flex flex-col shadow-lg z-10 md:relative absolute md:translate-x-0`}>
+        <div className="absolute inset-0 bg-gradient-to-b from-white/95 to-white/90 backdrop-blur-sm"></div>
+        
         {/* Header */}
-        <div className="p-4 border-b border-gray-200">
-          <div className="flex items-center justify-between mb-4">
-            <div className="flex items-center gap-2">
+        <div className="relative p-6 border-b border-gray-200/50">
+          <div className="flex items-center justify-between mb-6">
+            <div className="flex items-center gap-3">
               {onBack && (
                 <button
                   onClick={onBack}
-                  className="p-1 hover:bg-gray-200 rounded transition-colors"
+                  className="p-2 hover:bg-gray-100 rounded-lg transition-all duration-200 transform hover:scale-105 active:scale-95"
                 >
-                  <ArrowLeft size={16} className="text-gray-600" />
+                  <ArrowLeft size={18} className="text-gray-600" />
                 </button>
               )}
-              <h1 className="text-lg font-semibold text-gray-900">Notes</h1>
+              <h1 className="text-2xl font-bold text-gray-900 tracking-tight">Notes</h1>
             </div>
-            <button
-              onClick={createNewNote}
-              className="flex items-center gap-1 px-3 py-1.5 text-sm bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
-            >
-              <Plus size={14} />
-              New
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setSidebarOpen(false)}
+                className="md:hidden p-2 hover:bg-gray-100 rounded-lg transition-all duration-200"
+              >
+                <X size={18} className="text-gray-600" />
+              </button>
+              <button
+                onClick={createNewNote}
+                className="group flex items-center gap-2 px-4 py-2 text-sm bg-gradient-to-r from-indigo-600 to-purple-600 text-white rounded-lg hover:from-indigo-700 hover:to-purple-700 transition-all duration-300 transform hover:scale-105 active:scale-95 shadow-md hover:shadow-lg"
+              >
+                <Plus size={16} className="transform group-hover:rotate-90 transition-transform duration-200" />
+                New
+              </button>
+            </div>
           </div>
           
           {/* Mind Map Button */}
-          <div className="mb-4">
+          <div className="mb-6">
             <button
               onClick={() => setShowMindMap(true)}
-              className="flex items-center gap-1 w-full px-3 py-2 text-sm bg-purple-600 text-white rounded-md hover:bg-purple-700 transition-colors"
+              className="group flex items-center gap-2 w-full px-4 py-3 text-sm bg-gradient-to-r from-purple-600 to-pink-600 text-white rounded-lg hover:from-purple-700 hover:to-pink-700 transition-all duration-300 transform hover:scale-105 active:scale-95 shadow-md hover:shadow-lg"
             >
-              <Share2 size={14} />
+              <Share2 size={16} className="transform group-hover:rotate-12 transition-transform duration-200" />
               Mind Map
             </button>
           </div>
           
           {/* Search */}
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={16} />
+          <div className={`relative transition-all duration-300 ${isSearchFocused ? 'scale-105' : 'scale-100'}`}>
+            <Search className={`absolute left-3 top-1/2 transform -translate-y-1/2 transition-all duration-200 ${isSearchFocused ? 'text-indigo-500' : 'text-gray-400'}`} size={16} />
             <input
+              ref={searchInputRef}
               type="text"
-              placeholder="Search notes..."
+              placeholder="Search notes... (Ctrl+K)"
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full pl-9 pr-3 py-2 text-sm border border-gray-200 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              onFocus={() => setIsSearchFocused(true)}
+              onBlur={() => setIsSearchFocused(false)}
+              className={`w-full pl-10 pr-4 py-3 text-sm border rounded-lg focus:outline-none transition-all duration-300 ${
+                isSearchFocused 
+                  ? 'border-indigo-500 bg-white shadow-lg ring-2 ring-indigo-500/20' 
+                  : 'border-gray-200 bg-gray-50/50 hover:bg-white hover:border-gray-300'
+              }`}
             />
           </div>
         </div>
 
         {/* Notes List */}
-        <div className="flex-1 overflow-y-auto">
-          {filteredNotes.map(note => (
+        <div className="flex-1 overflow-y-auto p-4 space-y-2 relative">
+          {filteredNotes.map((note, index) => (
             <div
               key={note.id}
-              className={`p-3 border-b border-gray-100 cursor-pointer hover:bg-gray-100 transition-colors ${
-                activeNoteId === note.id ? 'bg-blue-50 border-l-4 border-l-blue-600' : ''
-              }`}
+              className={`group relative p-4 border border-gray-200/50 cursor-pointer rounded-lg transition-all duration-300 transform hover:scale-105 active:scale-95 ${
+                activeNoteId === note.id 
+                  ? 'bg-gradient-to-r from-indigo-50 to-purple-50 border-indigo-200 shadow-lg scale-105' 
+                  : 'bg-white/80 hover:bg-white hover:shadow-md'
+              } ${animatingNotes.has(note.id) ? 'animate-pulse' : ''}`}
+              style={{
+                animationDelay: `${index * 50}ms`,
+                transform: `perspective(1000px) rotateY(${activeNoteId === note.id ? '0deg' : '1deg'})`,
+              }}
             >
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-3">
                 <div 
-                  className="flex items-center gap-2 flex-1 min-w-0"
+                  className="flex items-center gap-3 flex-1 min-w-0"
                   onClick={() => setActiveNoteId(note.id)}
                 >
-                  <FileText size={16} className="text-gray-400 flex-shrink-0" />
+                  <div className={`p-2 rounded-lg transition-all duration-200 ${
+                    activeNoteId === note.id 
+                      ? 'bg-indigo-100 text-indigo-600' 
+                      : 'bg-gray-100 text-gray-400 group-hover:bg-gray-200'
+                  }`}>
+                    <FileText size={16} />
+                  </div>
                   <div className="flex-1 min-w-0">
-                    <h3 className="font-medium text-gray-900 truncate text-sm">
+                    <h3 className={`font-medium truncate text-sm transition-colors duration-200 ${
+                      activeNoteId === note.id ? 'text-indigo-900' : 'text-gray-900'
+                    }`}>
                       {note.title || 'Untitled'}
                     </h3>
                     <p className="text-xs text-gray-500 mt-1">
@@ -398,24 +244,24 @@ const LinearPage: React.FC<LinearPageProps> = ({ onBack }) => {
                     </p>
                   </div>
                 </div>
-                <div className="relative">
+                <div className="relative delete-menu">
                   <button
                     onClick={(e) => {
                       e.stopPropagation();
                       setShowDeleteMenu(showDeleteMenu === note.id ? null : note.id);
                     }}
-                    className="p-1 hover:bg-gray-200 rounded transition-colors"
+                    className="p-2 hover:bg-gray-200 rounded-lg transition-all duration-200 transform hover:scale-110 active:scale-95 opacity-0 group-hover:opacity-100"
                   >
                     <MoreHorizontal size={14} className="text-gray-400" />
                   </button>
                   {showDeleteMenu === note.id && (
-                    <div className="absolute right-0 top-8 bg-white border border-gray-200 rounded-md shadow-lg z-10">
+                    <div className="absolute right-0 top-12 bg-white border border-gray-200 rounded-lg shadow-xl z-20 transform origin-top-right animate-in fade-in zoom-in-95 duration-200">
                       <button
                         onClick={(e) => {
                           e.stopPropagation();
                           deleteNote(note.id);
                         }}
-                        className="block w-full px-3 py-2 text-left text-sm text-red-600 hover:bg-red-50 transition-colors"
+                        className="block w-full px-4 py-2 text-left text-sm text-red-600 hover:bg-red-50 transition-all duration-200 rounded-lg"
                       >
                         Delete
                       </button>
@@ -423,39 +269,90 @@ const LinearPage: React.FC<LinearPageProps> = ({ onBack }) => {
                   )}
                 </div>
               </div>
+              
+              {/* Animated border */}
+              <div className={`absolute inset-0 rounded-lg transition-all duration-300 ${
+                activeNoteId === note.id 
+                  ? 'bg-gradient-to-r from-indigo-500/20 to-purple-500/20 opacity-100' 
+                  : 'opacity-0'
+              }`}></div>
             </div>
           ))}
         </div>
       </div>
 
+      {/* Mobile Sidebar Toggle */}
+      <div className="md:hidden absolute top-4 left-4 z-20">
+        <button
+          onClick={() => setSidebarOpen(true)}
+          className={`p-3 bg-white/90 backdrop-blur-md rounded-lg shadow-lg transition-all duration-300 transform hover:scale-105 active:scale-95 ${
+            sidebarOpen ? 'opacity-0 pointer-events-none' : 'opacity-100'
+          }`}
+        >
+          <Menu size={18} className="text-gray-600" />
+        </button>
+      </div>
+
       {/* Main Content */}
-      <div className="flex-1 flex flex-col">
+      <div className="flex-1 flex flex-col relative">
+        {/* Background Pattern */}
+        <div className="absolute inset-0 opacity-5">
+          <div className="absolute inset-0 bg-gradient-to-br from-indigo-500/10 via-purple-500/10 to-pink-500/10"></div>
+        </div>
+        
         {activeNote ? (
-          <>
+          <div className="relative z-10 flex-1 flex flex-col">
             {/* Note Header */}
-            <div className="p-6">
+            <div className="p-8 border-b border-gray-200/50 bg-white/50 backdrop-blur-sm">
               <input
                 type="text"
                 value={activeNote.title}
                 onChange={(e) => updateNoteTitle(activeNote.id, e.target.value)}
-                className="text-3xl font-bold text-gray-900 w-full bg-transparent border-none outline-none placeholder-gray-400"
+                className="text-4xl font-bold text-gray-900 w-full bg-transparent border-none outline-none placeholder-gray-400 transition-all duration-300 focus:scale-105 transform-gpu"
                 placeholder="Page title"
+                style={{ 
+                  fontFamily: 'Inter, system-ui, -apple-system, sans-serif',
+                  transform: 'perspective(1000px) rotateX(2deg)'
+                }}
               />
             </div>
 
             {/* Note Content */}
-            <div className="flex-1 p-6">
-              <textarea
-                value={activeNote.content}
-                onChange={(e) => updateNoteContent(activeNote.id, e.target.value)}
-                placeholder="Start writing..."
-                className="w-full h-full resize-none border-none outline-none text-gray-900 text-base leading-relaxed placeholder-gray-400 bg-transparent"
-                style={{ fontFamily: 'system-ui, -apple-system, sans-serif' }}
-              />
+            <div className="flex-1 p-8 bg-white/30 backdrop-blur-sm">
+              <div className="max-w-4xl mx-auto h-full">
+                <textarea
+                  value={activeNote.content}
+                  onChange={(e) => updateNoteContent(activeNote.id, e.target.value)}
+                  placeholder="Start writing your thoughts..."
+                  className="w-full h-full resize-none border-none outline-none text-gray-900 text-lg leading-relaxed placeholder-gray-400 bg-transparent transition-all duration-300 focus:scale-105 transform-gpu"
+                  style={{ 
+                    fontFamily: 'Inter, system-ui, -apple-system, sans-serif',
+                    transform: 'perspective(1000px) rotateX(1deg)'
+                  }}
+                />
+              </div>
             </div>
-          </>
-        ) : null}
+          </div>
+        ) : (
+          <div className="flex-1 flex items-center justify-center">
+            <div className="text-center transform perspective-1000 rotate-y-12">
+              <div className="w-24 h-24 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-full flex items-center justify-center mx-auto mb-4 shadow-2xl transform hover:scale-110 transition-all duration-300">
+                <FileText size={32} className="text-white" />
+              </div>
+              <p className="text-xl font-medium text-gray-600 mb-2">Select a note to start writing</p>
+              <p className="text-gray-500">Or create a new one to get started</p>
+            </div>
+          </div>
+        )}
       </div>
+
+      {/* Overlay for mobile */}
+      {sidebarOpen && (
+        <div 
+          className="md:hidden fixed inset-0 bg-black/20 backdrop-blur-sm z-5"
+          onClick={() => setSidebarOpen(false)}
+        ></div>
+      )}
     </div>
   );
 };
