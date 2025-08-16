@@ -2,7 +2,133 @@
 
 import React, { useState, useEffect } from 'react';
 import { ArrowRight, FileText, Edit3, Brain, Sparkles } from 'lucide-react';
-import LinearPage from './linear/components/linearpage';
+import AuthWrapper from './AuthWrapper'; // New wrapper component
+import LinearPage from './linear/components/linearpage'; // Import Linear page
+
+// Type definitions for database connection
+interface DatabaseConnectionResult {
+  connected: boolean;
+  details?: any;
+  error?: string;
+  latency?: number;
+}
+
+interface DatabaseDetails {
+  database?: string;
+  latency?: number;
+  server?: string;
+  [key: string]: any;
+}
+
+// Database connection utility
+const checkDatabaseConnection = async (): Promise<DatabaseConnectionResult> => {
+  try {
+    // Simulate API call to check database status
+    const response = await fetch('/api/health-check', {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      // Add timeout
+      signal: AbortSignal.timeout(5000)
+    });
+
+    if (response.ok) {
+      const data: DatabaseDetails = await response.json();
+      if (data.database === 'connected') {
+        console.log('🎉✨ Database Connection Status: CONNECTED! 🚀💚');
+        console.log('📊 Database Details:', {
+          status: '🟢 Online',
+          latency: `⚡ ${data.latency || 'Unknown'}ms`,
+          server: `🖥️ ${data.server || 'Primary'}`,
+          timestamp: `⏰ ${new Date().toISOString()}`
+        });
+        return { connected: true, details: data };
+      } else {
+        throw new Error('Database reported as disconnected');
+      }
+    } else {
+      throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+    }
+  } catch (error: unknown) {
+    const err = error as Error;
+    
+    if (err.name === 'TimeoutError') {
+      console.error('⏳❌ Database Connection Status: TIMEOUT! 🔥💔');
+      console.error('🚨 Connection timed out after 5 seconds');
+    } else if (err.name === 'TypeError' && err.message.includes('fetch')) {
+      console.error('🌐❌ Database Connection Status: NETWORK ERROR! 📡💔');
+      console.error('🚨 Unable to reach database server - check your internet connection');
+    } else {
+      console.error('💥❌ Database Connection Status: FAILED! 🛑💔');
+      console.error('🔍 Error Details:', {
+        message: `📝 ${err.message}`,
+        type: `🏷️ ${err.name || 'Unknown'}`,
+        timestamp: `⏰ ${new Date().toISOString()}`
+      });
+    }
+    
+    // Log troubleshooting tips
+    console.warn('🔧💡 Troubleshooting Tips:');
+    console.warn('  1. 🔌 Check if database server is running');
+    console.warn('  2. 🌐 Verify network connectivity');
+    console.warn('  3. 🔑 Validate database credentials');
+    console.warn('  4. 🔥 Check firewall settings');
+    
+    return { connected: false, error: err.message };
+  }
+};
+
+// Mock database health check for demo (since we don't have a real backend)
+const mockDatabaseCheck = (): Promise<DatabaseConnectionResult> => {
+  return new Promise<DatabaseConnectionResult>((resolve) => {
+    setTimeout(() => {
+      // Simulate random connection success/failure for demo
+      const isConnected = Math.random() > 0.3; // 70% success rate
+      
+      if (isConnected) {
+        console.log('🎉✨ Database Connection Status: CONNECTED! 🚀💚');
+        console.log('📊 Mock Database Details:', {
+          status: '🟢 Online',
+          latency: `⚡ ${Math.floor(Math.random() * 50) + 10}ms`,
+          server: '🖥️ Primary Node',
+          version: '🔖 PostgreSQL 15.2',
+          connections: `👥 ${Math.floor(Math.random() * 100) + 20}/200`,
+          uptime: '⏱️ 99.9%',
+          timestamp: `⏰ ${new Date().toISOString()}`
+        });
+        resolve({ connected: true, latency: Math.floor(Math.random() * 50) + 10 });
+      } else {
+        const errors = [
+          'Connection refused by server',
+          'Authentication failed',
+          'Network timeout',
+          'Database is under maintenance',
+          'Too many connections'
+        ];
+        const randomError = errors[Math.floor(Math.random() * errors.length)];
+        
+        console.error('💥❌ Database Connection Status: FAILED! 🛑💔');
+        console.error('🔍 Mock Error Details:', {
+          message: `📝 ${randomError}`,
+          type: '🏷️ ConnectionError',
+          server: '🖥️ db.notecanvas.com:5432',
+          retryCount: `🔄 ${Math.floor(Math.random() * 3) + 1}/3`,
+          timestamp: `⏰ ${new Date().toISOString()}`
+        });
+        
+        console.warn('🔧💡 Troubleshooting Tips:');
+        console.warn('  1. 🔌 Check if database server is running');
+        console.warn('  2. 🌐 Verify network connectivity');
+        console.warn('  3. 🔑 Validate database credentials');
+        console.warn('  4. 🔥 Check firewall settings');
+        console.warn('  5. 📊 Monitor connection pool status');
+        
+        resolve({ connected: false, error: randomError });
+      }
+    }, Math.random() * 2000 + 500); // Random delay 0.5-2.5s
+  });
+};
 
 function AnimatedParticles() {
   const [particles, setParticles] = useState<Array<{
@@ -81,18 +207,117 @@ function FeatureCard({ icon: Icon, title, description, delay = 0 }: FeatureCardP
 }
 
 export default function HomePage() {
+  const [showAuth, setShowAuth] = useState(false);
   const [showLinear, setShowLinear] = useState(false);
   const [isLoaded, setIsLoaded] = useState(false);
+  const [dbStatus, setDbStatus] = useState<{
+    connected: boolean;
+    checking: boolean;
+    error?: string;
+  }>({ connected: false, checking: true });
 
   useEffect(() => {
     const timer = setTimeout(() => setIsLoaded(true), 100);
     return () => clearTimeout(timer);
   }, []);
 
+  // Database connection check on component mount
+  useEffect(() => {
+    const initializeApp = async () => {
+      console.log('🚀 NoteCanvas Application Starting...');
+      console.log('🔄 Initializing database connection check...');
+      
+      try {
+        // Use mock check for demo - replace with real checkDatabaseConnection() in production
+        const result: DatabaseConnectionResult = await mockDatabaseCheck();
+        
+        setDbStatus({
+          connected: result.connected,
+          checking: false,
+          error: result.error
+        });
+
+        if (result.connected) {
+          console.log('✅ Application ready! Database is online and responsive 🎊');
+        } else {
+          console.warn('⚠️ Application started with database issues - some features may be limited');
+        }
+      } catch (error: unknown) {
+        console.error('🚨 Critical error during app initialization:', error);
+        const errorMessage = error instanceof Error ? error.message : 'Unknown initialization error';
+        setDbStatus({
+          connected: false,
+          checking: false,
+          error: errorMessage
+        });
+      }
+    };
+
+    initializeApp();
+  }, []);
+
+  // Periodic health checks (every 30 seconds)
+  useEffect(() => {
+    if (!dbStatus.checking) {
+      const healthCheck = setInterval(async () => {
+        console.log('🔄 Performing periodic database health check...');
+        try {
+          const result: DatabaseConnectionResult = await mockDatabaseCheck();
+          setDbStatus(prev => ({
+            ...prev,
+            connected: result.connected,
+            error: result.error
+          }));
+        } catch (error: unknown) {
+          console.error('🚨 Health check failed:', error);
+        }
+      }, 30000);
+
+      return () => clearInterval(healthCheck);
+    }
+  }, [dbStatus.checking]);
+
+  // Handler for when user signs out - navigates back to homepage
+  const handleSignOut = () => {
+    setShowLinear(false);
+    setShowAuth(false);
+    // Force a clean state reset
+    setTimeout(() => {
+      setIsLoaded(false);
+      setTimeout(() => setIsLoaded(true), 100);
+    }, 100);
+  };
+
+  // Handler for successful authentication - navigates to Linear page
+  const handleAuthSuccess = () => {
+    if (!dbStatus.connected) {
+      console.warn('⚠️ User attempting to authenticate with database offline - proceeding with limited functionality');
+    }
+    setShowAuth(false);
+    setShowLinear(true);
+  };
+
+  // Show Linear page if user is authenticated
   if (showLinear) {
-    return <LinearPage onBack={() => setShowLinear(false)} />;
+    return (
+      <LinearPage 
+        onBack={() => setShowLinear(false)} 
+        onSignOut={handleSignOut}
+      />
+    );
   }
 
+  // Show authentication page
+  if (showAuth) {
+    return (
+      <AuthWrapper 
+        onBack={() => setShowAuth(false)} 
+        onAuthSuccess={handleAuthSuccess}
+      />
+    );
+  }
+
+  // Show homepage (default state)
   return (
     <div className="relative w-screen h-screen flex flex-col items-center justify-center overflow-hidden bg-gradient-to-br from-gray-900 via-gray-800 to-indigo-900 font-sans">
       {/* Background Pattern */}
@@ -105,6 +330,21 @@ export default function HomePage() {
       <FloatingElement className="w-96 h-96 top-1/4 left-1/6 animate-float-slow" gradient="from-indigo-500/10 to-purple-500/10" />
       <FloatingElement className="w-72 h-72 bottom-1/3 right-1/5 animate-float-slower" gradient="from-purple-500/10 to-pink-500/10" />
       <FloatingElement className="w-48 h-48 top-1/3 right-1/4 animate-float-slow" gradient="from-blue-500/10 to-indigo-500/10" />
+
+      {/* Database Status Indicator (only visible in dev) */}
+      {process.env.NODE_ENV === 'development' && (
+        <div className="absolute top-4 right-4 z-50">
+          <div className={`px-3 py-2 rounded-lg text-xs font-medium ${
+            dbStatus.checking 
+              ? 'bg-yellow-500/20 text-yellow-300 border border-yellow-500/30' 
+              : dbStatus.connected 
+                ? 'bg-green-500/20 text-green-300 border border-green-500/30'
+                : 'bg-red-500/20 text-red-300 border border-red-500/30'
+          }`}>
+            {dbStatus.checking ? '🔄 Checking DB...' : dbStatus.connected ? '🟢 DB Online' : '🔴 DB Offline'}
+          </div>
+        </div>
+      )}
 
       {/* Main content */}
       <div className={`relative z-10 text-center space-y-8 px-6 max-w-4xl transition-all duration-1000 ${isLoaded ? 'animate-fade-in-up' : 'opacity-0 translate-y-10'}`}>
@@ -163,12 +403,15 @@ export default function HomePage() {
         {/* Action buttons */}
         <div className="flex flex-col sm:flex-row items-center justify-center gap-4 mt-16 animate-fade-in-delayed-2">
           <button
-            onClick={() => setShowLinear(true)}
+            onClick={() => setShowAuth(true)}
             className="group relative"
+            disabled={dbStatus.checking}
           >
             <div className="absolute inset-0 bg-gradient-to-r from-indigo-500/20 to-purple-500/20 rounded-xl blur-md opacity-50 group-hover:opacity-100 transition-opacity duration-500" />
-            <div className="relative bg-gradient-to-r from-indigo-600 to-purple-600 text-white text-lg px-8 py-4 rounded-xl font-semibold transition-all duration-300 ease-out transform hover:scale-105 hover:-translate-y-2 active:scale-95 flex items-center gap-3 shadow-2xl">
-              Get Started
+            <div className={`relative bg-gradient-to-r from-indigo-600 to-purple-600 text-white text-lg px-8 py-4 rounded-xl font-semibold transition-all duration-300 ease-out transform hover:scale-105 hover:-translate-y-2 active:scale-95 flex items-center gap-3 shadow-2xl ${
+              dbStatus.checking ? 'opacity-50 cursor-not-allowed' : ''
+            }`}>
+              {dbStatus.checking ? 'Starting...' : 'Get Started'}
               <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform duration-300" />
             </div>
           </button>
