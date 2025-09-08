@@ -1,7 +1,20 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Plus, FileText, Search, MoreHorizontal, ArrowLeft, Share2, X, Menu, Mic, Code, Calculator, Bold, Italic, Underline, Type, ChevronDown, User, LogOut, Settings } from 'lucide-react';
 import { signOut, onAuthStateChanged, User as FirebaseUser } from 'firebase/auth';
-import { auth } from '../../firebase/config'; // Adjust path as needed
+import { 
+  collection, 
+  addDoc, 
+  updateDoc, 
+  deleteDoc, 
+  doc, 
+  getDocs, 
+  query, 
+  orderBy, 
+  where,
+  onSnapshot,
+  serverTimestamp 
+} from 'firebase/firestore';
+import { auth, db } from '../../firebase/config'; // Adjust path as needed
 
 // Interface definitions
 interface MindMapPageProps {
@@ -16,13 +29,16 @@ interface RichTextEditorProps {
   content: string;
   onChange: (content: string) => void;
   placeholder: string;
+  onEscape?: () => void;
 }
 
 interface Note {
-  id: number;
+  id: string;
   title: string;
   content: string;
   createdAt: Date;
+  updatedAt: Date;
+  userId: string;
 }
 
 interface LinearPageProps {
@@ -35,167 +51,12 @@ interface SelectionMenuPosition {
   y: number;
 }
 
-// Profile Avatar Component
-const ProfileAvatar: React.FC<{ user: FirebaseUser | null; size?: 'sm' | 'md' | 'lg' }> = ({ user, size = 'md' }) => {
-  const sizeClasses = {
-    sm: 'w-8 h-8 text-sm',
-    md: 'w-10 h-10 text-base',
-    lg: 'w-12 h-12 text-lg'
-  };
-
-  const getInitials = (name: string | null, email: string | null): string => {
-    if (name) {
-      const names = name.trim().split(' ');
-      if (names.length >= 2) {
-        return names[0][0].toUpperCase() + names[names.length - 1][0].toUpperCase();
-      }
-      return names[0][0].toUpperCase();
-    }
-    if (email) {
-      return email[0].toUpperCase();
-    }
-    return 'U';
-  };
-
-  if (user?.photoURL) {
-    return (
-      <img
-        src={user.photoURL}
-        alt={user.displayName || 'Profile'}
-        className={`${sizeClasses[size]} rounded-full object-cover border-2 border-white shadow-sm`}
-      />
-    );
-  }
-
-  return (
-    <div className={`${sizeClasses[size]} rounded-full bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center text-white font-semibold border-2 border-white shadow-sm`}>
-      {getInitials(user?.displayName || null, user?.email || null)}
-    </div>
-  );
-};
-
-// Profile Dropdown Component
-const ProfileDropdown: React.FC<{ user: FirebaseUser | null; onSignOut?: () => void }> = ({ user, onSignOut }) => {
-  const [isOpen, setIsOpen] = useState<boolean>(false);
-  const dropdownRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
-        setIsOpen(false);
-      }
-    };
-
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, []);
-
-  const handleSignOut = async () => {
-    try {
-      await signOut(auth);
-      setIsOpen(false);
-      // Navigate to homepage by calling onSignOut which should handle navigation
-      if (onSignOut) {
-        onSignOut();
-      }
-    } catch (error) {
-      console.error('Error signing out:', error);
-    }
-  };
-
-  const exportNotes = () => {
-    setIsOpen(false);
-    // Export notes functionality - you can implement this
-    console.log('Export notes clicked');
-    // Example: Create a JSON file with all notes
-    alert('Export feature coming soon!');
-  };
-
-  const clearAllData = () => {
-    setIsOpen(false);
-    if (window.confirm('Are you sure you want to clear all notes? This action cannot be undone.')) {
-      // Clear all notes functionality
-      localStorage.removeItem('notes');
-      window.location.reload();
-    }
-  };
-
-  return (
-    <div className="relative" ref={dropdownRef}>
-      <button
-        onClick={() => setIsOpen(!isOpen)}
-        className="flex items-center gap-2 p-1 hover:bg-gray-100 rounded-lg transition-all duration-200 transform hover:scale-105 active:scale-95"
-        type="button"
-      >
-        <ProfileAvatar user={user} size="md" />
-      </button>
-
-      {isOpen && (
-        <div className="absolute right-0 top-full mt-2 w-64 bg-white border border-gray-200 rounded-lg shadow-xl z-50 transform origin-top-right animate-in fade-in zoom-in-95 duration-200">
-          {/* User Info Header */}
-          <div className="p-4 border-b border-gray-100">
-            <div className="flex items-center gap-3">
-              <ProfileAvatar user={user} size="lg" />
-              <div className="flex-1 min-w-0">
-                <p className="font-semibold text-gray-900 truncate">
-                  {user?.displayName || 'User'}
-                </p>
-                <p className="text-sm text-gray-500 truncate">
-                  {user?.email}
-                </p>
-              </div>
-            </div>
-          </div>
-
-          {/* Menu Items */}
-          <div className="py-2">
-            <button
-              onClick={exportNotes}
-              className="flex items-center gap-3 w-full px-4 py-3 text-left text-sm text-gray-700 hover:bg-gray-50 transition-colors duration-200"
-              type="button"
-            >
-              <div className="p-1.5 bg-blue-100 rounded-lg">
-                <FileText size={14} className="text-blue-600" />
-              </div>
-              <span>Export Notes</span>
-            </button>
-
-            <button
-              onClick={clearAllData}
-              className="flex items-center gap-3 w-full px-4 py-3 text-left text-sm text-orange-600 hover:bg-orange-50 transition-colors duration-200"
-              type="button"
-            >
-              <div className="p-1.5 bg-orange-100 rounded-lg">
-                <X size={14} className="text-orange-600" />
-              </div>
-              <span>Clear All Notes</span>
-            </button>
-
-            <div className="border-t border-gray-100 my-2"></div>
-
-            <button
-              onClick={handleSignOut}
-              className="flex items-center gap-3 w-full px-4 py-3 text-left text-sm text-red-600 hover:bg-red-50 transition-colors duration-200"
-              type="button"
-            >
-              <div className="p-1.5 bg-red-100 rounded-lg">
-                <LogOut size={14} className="text-red-600" />
-              </div>
-              <span>Sign Out</span>
-            </button>
-          </div>
-        </div>
-      )}
-    </div>
-  );
-};
-
 // Import the actual components
 const MindMapPage = React.lazy(() => import('./mindmap'));
 const VoiceTranscriptionPage = React.lazy(() => import('./voice_text'));
 
 // Rich Text Editor Component
-const RichTextEditor: React.FC<RichTextEditorProps> = ({ content, onChange, placeholder }) => {
+const RichTextEditor: React.FC<RichTextEditorProps> = ({ content, onChange, placeholder, onEscape }) => {
   const editorRef = useRef<HTMLDivElement>(null);
   const [showSelectionMenu, setShowSelectionMenu] = useState<boolean>(false);
   const [selectionMenuPosition, setSelectionMenuPosition] = useState<SelectionMenuPosition>({ x: 0, y: 0 });
@@ -205,6 +66,7 @@ const RichTextEditor: React.FC<RichTextEditorProps> = ({ content, onChange, plac
   const [showSizeMenu, setShowSizeMenu] = useState<boolean>(false);
   const [currentFont, setCurrentFont] = useState<string>('Inter');
   const [currentSize, setCurrentSize] = useState<string>('16px');
+  const [isInFormattedSpan, setIsInFormattedSpan] = useState<boolean>(false);
 
   const fonts = [
     { name: 'Inter', value: 'Inter, system-ui, -apple-system, sans-serif' },
@@ -226,6 +88,27 @@ const RichTextEditor: React.FC<RichTextEditorProps> = ({ content, onChange, plac
       editorRef.current.innerHTML = content || '';
     }
   }, [content]);
+
+  // Check if cursor is inside a formatted span
+  const checkFormattedSpanContext = (): boolean => {
+    const selection = window.getSelection();
+    if (!selection || selection.rangeCount === 0) return false;
+    
+    const range = selection.getRangeAt(0);
+    const container = range.startContainer;
+    
+    // Check if we're inside a formatted span
+    let currentElement = container.nodeType === Node.TEXT_NODE ? container.parentElement : container as Element;
+    
+    while (currentElement && currentElement !== editorRef.current) {
+      if (currentElement.hasAttribute && currentElement.hasAttribute('data-type')) {
+        return true;
+      }
+      currentElement = currentElement.parentElement;
+    }
+    
+    return false;
+  };
 
   // Smart detection functions
   const detectCodePattern = (text: string): boolean => {
@@ -273,6 +156,50 @@ const RichTextEditor: React.FC<RichTextEditorProps> = ({ content, onChange, plac
       }
     } else {
       setShowSelectionMenu(false);
+    }
+
+    // Update formatted span context
+    setIsInFormattedSpan(checkFormattedSpanContext());
+  };
+
+  const exitFormattedSpan = (): void => {
+    const selection = window.getSelection();
+    if (!selection || selection.rangeCount === 0) return;
+
+    const range = selection.getRangeAt(0);
+    let container = range.startContainer;
+    
+    // Find the formatted span
+    let formattedSpan: Element | null = null;
+    let currentElement = container.nodeType === Node.TEXT_NODE ? container.parentElement : container as Element;
+    
+    while (currentElement && currentElement !== editorRef.current) {
+      if (currentElement.hasAttribute && currentElement.hasAttribute('data-type')) {
+        formattedSpan = currentElement;
+        break;
+      }
+      currentElement = currentElement.parentElement;
+    }
+
+    if (formattedSpan) {
+      // Create a new range after the formatted span
+      const newRange = document.createRange();
+      newRange.setStartAfter(formattedSpan);
+      newRange.collapse(true);
+      
+      // Add space if there isn't one already
+      const nextSibling = formattedSpan.nextSibling;
+      if (!nextSibling || (nextSibling.nodeType === Node.TEXT_NODE && !nextSibling.textContent?.startsWith(' '))) {
+        const spaceNode = document.createTextNode(' ');
+        newRange.insertNode(spaceNode);
+        newRange.setStartAfter(spaceNode);
+        newRange.collapse(true);
+      }
+      
+      selection.removeAllRanges();
+      selection.addRange(newRange);
+      
+      setIsInFormattedSpan(false);
     }
   };
 
@@ -370,9 +297,16 @@ const RichTextEditor: React.FC<RichTextEditorProps> = ({ content, onChange, plac
       }
     }
     
-    // Escape key to clear selection menu
+    // Escape key handling
     if (e.key === 'Escape') {
-      setShowSelectionMenu(false);
+      if (showSelectionMenu) {
+        setShowSelectionMenu(false);
+      } else if (isInFormattedSpan) {
+        e.preventDefault();
+        exitFormattedSpan();
+      } else if (onEscape) {
+        onEscape();
+      }
     }
     
     // Right arrow key to exit formatting when at the end of a formatted span
@@ -390,23 +324,7 @@ const RichTextEditor: React.FC<RichTextEditorProps> = ({ content, onChange, plac
           const span = container.parentElement.closest('[data-type]') || container.parentElement;
           if (span && range.endOffset === container.textContent?.length) {
             e.preventDefault();
-            
-            // Move cursor after the span
-            const newRange = document.createRange();
-            newRange.setStartAfter(span);
-            newRange.collapse(true);
-            
-            // Add space if there isn't one already
-            const nextSibling = span.nextSibling;
-            if (!nextSibling || (nextSibling.nodeType === Node.TEXT_NODE && !nextSibling.textContent?.startsWith(' '))) {
-              const spaceNode = document.createTextNode(' ');
-              newRange.insertNode(spaceNode);
-              newRange.setStartAfter(spaceNode);
-              newRange.collapse(true);
-            }
-            
-            selection.removeAllRanges();
-            selection.addRange(newRange);
+            exitFormattedSpan();
           }
         }
       }
@@ -531,7 +449,9 @@ const RichTextEditor: React.FC<RichTextEditorProps> = ({ content, onChange, plac
         </button>
         
         <div className="w-px h-6 bg-gray-300 mx-2"></div>
-        <span className="text-xs text-gray-500 flex-shrink-0">Select text to highlight as code or math • Press → or Esc to exit formatting</span>
+        <span className="text-xs text-gray-500 flex-shrink-0">
+          Select text to highlight
+        </span>
       </div>
 
       {/* Editor Content */}
@@ -604,45 +524,183 @@ const RichTextEditor: React.FC<RichTextEditorProps> = ({ content, onChange, plac
 };
 
 const LinearPage: React.FC<LinearPageProps> = ({ onBack, onSignOut }) => {
-  const initialNote: Note = {
-    id: Date.now(),
-    title: '',
-    content: '',
-    createdAt: new Date()
-  };
-
-  const [notes, setNotes] = useState<Note[]>([initialNote]);
-  const [activeNoteId, setActiveNoteId] = useState<number>(initialNote.id);
+  const [notes, setNotes] = useState<Note[]>([]);
+  const [activeNoteId, setActiveNoteId] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState<string>('');
-  const [showDeleteMenu, setShowDeleteMenu] = useState<number | null>(null);
   const [showMindMap, setShowMindMap] = useState<boolean>(false);
   const [showVoiceTranscription, setShowVoiceTranscription] = useState<boolean>(false);
   const [sidebarOpen, setSidebarOpen] = useState<boolean>(true);
   const [isSearchFocused, setIsSearchFocused] = useState<boolean>(false);
-  const [animatingNotes, setAnimatingNotes] = useState<Set<number>>(new Set());
+  const [animatingNotes, setAnimatingNotes] = useState<Set<string>>(new Set());
   const [currentUser, setCurrentUser] = useState<FirebaseUser | null>(null);
+  const [loading, setLoading] = useState<boolean>(true);
+  const [saving, setSaving] = useState<boolean>(false);
+  const [showProfileMenu, setShowProfileMenu] = useState<boolean>(false);
   const searchInputRef = useRef<HTMLInputElement>(null);
+  const profileRef = useRef<HTMLDivElement>(null);
 
   // Listen for auth state changes
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (user) => {
       setCurrentUser(user);
+      if (user) {
+        loadNotes(user.uid);
+      } else {
+        setNotes([]);
+        setActiveNoteId(null);
+        setLoading(false);
+      }
     });
 
     return () => unsubscribe();
   }, []);
 
+  // Close profile menu when clicking outside
   useEffect(() => {
-    const handleClickOutside = (e: MouseEvent): void => {
-      const target = e.target as Element;
-      if (showDeleteMenu && !target.closest('.delete-menu')) {
-        setShowDeleteMenu(null);
+    const handleClickOutside = (event: MouseEvent) => {
+      if (profileRef.current && !profileRef.current.contains(event.target as Node)) {
+        setShowProfileMenu(false);
       }
     };
 
-    document.addEventListener('click', handleClickOutside);
-    return () => document.removeEventListener('click', handleClickOutside);
-  }, [showDeleteMenu]);
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, []);
+
+  // Load notes from Firestore - Modified to avoid composite index requirement
+  const loadNotes = async (userId: string) => {
+    try {
+      setLoading(true);
+      const notesRef = collection(db, 'notes');
+      const q = query(
+        notesRef, 
+        where('userId', '==', userId)
+        // Removed orderBy to avoid composite index requirement
+      );
+      
+      // Use real-time listener
+      const unsubscribe = onSnapshot(q, (querySnapshot) => {
+        const notesData: Note[] = [];
+        querySnapshot.forEach((doc) => {
+          const data = doc.data();
+          notesData.push({
+            id: doc.id,
+            title: data.title || '',
+            content: data.content || '',
+            createdAt: data.createdAt?.toDate() || new Date(),
+            updatedAt: data.updatedAt?.toDate() || new Date(),
+            userId: data.userId
+          });
+        });
+        
+        // Sort in memory by updatedAt descending
+        notesData.sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime());
+        
+        setNotes(notesData);
+        
+        // Set first note as active if no active note and notes exist
+        if (!activeNoteId && notesData.length > 0) {
+          setActiveNoteId(notesData[0].id);
+        }
+        
+        setLoading(false);
+      });
+
+      return unsubscribe;
+    } catch (error) {
+      console.error('Error loading notes:', error);
+      setLoading(false);
+    }
+  };
+
+  // Create new note
+  const createNewNote = async (): Promise<void> => {
+    if (!currentUser) return;
+
+    try {
+      setSaving(true);
+      const newNote = {
+        title: '',
+        content: '',
+        userId: currentUser.uid,
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp()
+      };
+
+      const docRef = await addDoc(collection(db, 'notes'), newNote);
+      setActiveNoteId(docRef.id);
+      
+      // Animate new note
+      setAnimatingNotes((prev: Set<string>) => new Set(prev).add(docRef.id));
+      setTimeout(() => {
+        setAnimatingNotes((prev: Set<string>) => {
+          const newSet = new Set(prev);
+          newSet.delete(docRef.id);
+          return newSet;
+        });
+      }, 600);
+      
+      setSaving(false);
+    } catch (error) {
+      console.error('Error creating note:', error);
+      setSaving(false);
+    }
+  };
+
+  // Update note title
+  const updateNoteTitle = async (id: string, title: string): Promise<void> => {
+    try {
+      const noteRef = doc(db, 'notes', id);
+      await updateDoc(noteRef, {
+        title,
+        updatedAt: serverTimestamp()
+      });
+    } catch (error) {
+      console.error('Error updating note title:', error);
+    }
+  };
+
+  // Update note content
+  const updateNoteContent = async (id: string, content: string): Promise<void> => {
+    try {
+      setSaving(true);
+      const noteRef = doc(db, 'notes', id);
+      await updateDoc(noteRef, {
+        content,
+        updatedAt: serverTimestamp()
+      });
+      setSaving(false);
+    } catch (error) {
+      console.error('Error updating note content:', error);
+      setSaving(false);
+    }
+  };
+
+  // Sign out
+  const handleSignOut = async (): Promise<void> => {
+    try {
+      await signOut(auth);
+      if (onSignOut) {
+        onSignOut();
+      }
+    } catch (error) {
+      console.error('Error signing out:', error);
+    }
+  };
+
+  // Get user display name or email
+  const getUserDisplayName = (): string => {
+    if (!currentUser) return '';
+    return currentUser.displayName || currentUser.email || 'User';
+  };
+
+  // Get user email
+  const getUserEmail = (): string => {
+    if (!currentUser) return '';
+    return currentUser.email || '';
+  };
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent): void => {
@@ -662,60 +720,6 @@ const LinearPage: React.FC<LinearPageProps> = ({ onBack, onSignOut }) => {
   }, []);
 
   const activeNote: Note | undefined = notes.find((note: Note) => note.id === activeNoteId);
-
-  const createNewNote = (): void => {
-    const newNote: Note = {
-      id: Date.now(),
-      title: '',
-      content: '',
-      createdAt: new Date()
-    };
-    setNotes([newNote, ...notes]);
-    setActiveNoteId(newNote.id);
-    
-    // Animate new note
-    setAnimatingNotes((prev: Set<number>) => new Set(prev).add(newNote.id));
-    setTimeout(() => {
-      setAnimatingNotes((prev: Set<number>) => {
-        const newSet = new Set(prev);
-        newSet.delete(newNote.id);
-        return newSet;
-      });
-    }, 600);
-  };
-
-  const deleteNote = (noteId: number): void => {
-    const remainingNotes = notes.filter((note: Note) => note.id !== noteId);
-    setNotes(remainingNotes);
-    
-    if (activeNoteId === noteId) {
-      if (remainingNotes.length > 0) {
-        setActiveNoteId(remainingNotes[0].id);
-      } else {
-        const newNote: Note = {
-          id: Date.now(),
-          title: '',
-          content: '',
-          createdAt: new Date()
-        };
-        setNotes([newNote]);
-        setActiveNoteId(newNote.id);
-      }
-    }
-    setShowDeleteMenu(null);
-  };
-
-  const updateNoteTitle = (id: number, title: string): void => {
-    setNotes(notes.map((note: Note) => 
-      note.id === id ? { ...note, title } : note
-    ));
-  };
-
-  const updateNoteContent = (id: number, content: string): void => {
-    setNotes(notes.map((note: Note) => 
-      note.id === id ? { ...note, content } : note
-    ));
-  };
 
   const filteredNotes = notes.filter((note: Note) => {
     const searchLower = searchTerm.toLowerCase();
@@ -737,6 +741,18 @@ const LinearPage: React.FC<LinearPageProps> = ({ onBack, onSignOut }) => {
       return date.toLocaleDateString();
     }
   };
+
+  // Show loading state
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-screen bg-gray-100">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600 mx-auto mb-4"></div>
+          <p className="text-gray-600">Loading your notes...</p>
+        </div>
+      </div>
+    );
+  }
 
   // Show MindMap if requested
   if (showMindMap) {
@@ -780,16 +796,8 @@ const LinearPage: React.FC<LinearPageProps> = ({ onBack, onSignOut }) => {
         <div className="relative p-6 border-b border-gray-200/50">
           <div className="flex items-center justify-between mb-6">
             <div className="flex items-center gap-3">
-              {onBack && (
-                <button
-                  onClick={onBack}
-                  className="p-2 hover:bg-gray-100 rounded-lg transition-all duration-200 transform hover:scale-105 active:scale-95"
-                  type="button"
-                >
-                  <ArrowLeft size={18} className="text-gray-600" />
-                </button>
-              )}
               <h1 className="text-2xl font-bold text-gray-900 tracking-tight">Notes</h1>
+              {saving && <span className="text-xs text-blue-600 animate-pulse">Saving...</span>}
             </div>
             <div className="flex items-center gap-2">
               <button
@@ -799,9 +807,54 @@ const LinearPage: React.FC<LinearPageProps> = ({ onBack, onSignOut }) => {
               >
                 <X size={18} className="text-gray-600" />
               </button>
+              
+              {/* Profile Dropdown */}
+              <div className="relative" ref={profileRef}>
+                <button
+                  onClick={() => setShowProfileMenu(!showProfileMenu)}
+                  className="p-2 hover:bg-gray-100 rounded-lg transition-all duration-200 text-gray-600"
+                  title="Profile"
+                  type="button"
+                >
+                  <User size={18} />
+                </button>
+                
+                {showProfileMenu && (
+                  <div className="absolute right-0 top-full mt-2 w-64 bg-white border border-gray-200 rounded-lg shadow-xl z-50 animate-in fade-in zoom-in-95 duration-200">
+                    <div className="p-4 border-b border-gray-200">
+                      <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-full flex items-center justify-center">
+                          <User size={20} className="text-white" />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="font-medium text-gray-900 truncate">
+                            {getUserDisplayName()}
+                          </p>
+                          <p className="text-xs text-gray-500 truncate">
+                            {getUserEmail()}
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                    
+                    <div className="p-2">
+                      <button
+                        onClick={handleSignOut}
+                        className="flex items-center gap-3 w-full px-3 py-2 text-sm text-red-600 hover:bg-red-50 rounded-lg transition-all duration-200"
+                        type="button"
+                      >
+                        <LogOut size={16} />
+                        Sign Out
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+              
               <button
                 onClick={createNewNote}
-                className="group flex items-center gap-2 px-4 py-2 text-sm bg-gradient-to-r from-indigo-600 to-purple-600 text-white rounded-lg hover:from-indigo-700 hover:to-purple-700 transition-all duration-300 transform hover:scale-105 active:scale-95 shadow-md hover:shadow-lg"
+                disabled={saving}
+                className="group flex items-center gap-2 px-4 py-2 text-sm bg-gradient-to-r from-indigo-600 to-purple-600 text-white rounded-lg hover:from-indigo-700 hover:to-purple-700 transition-all duration-300 transform hover:scale-105 active:scale-95 shadow-md hover:shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
                 type="button"
               >
                 <Plus size={16} className="transform group-hover:rotate-90 transition-transform duration-200" />
@@ -856,28 +909,33 @@ const LinearPage: React.FC<LinearPageProps> = ({ onBack, onSignOut }) => {
 
         {/* Notes List */}
         <div className="flex-1 overflow-y-auto p-4 space-y-2 relative">
-          {filteredNotes.map((note: Note, index: number) => {
-            // Strip HTML tags for preview
-            const contentPreview = note.content.replace(/<[^>]*>/g, '').substring(0, 100);
-            
-            return (
-              <div
-                key={note.id}
-                className={`group relative p-4 border border-gray-200/50 cursor-pointer rounded-lg transition-all duration-300 transform hover:scale-105 active:scale-95 ${
-                  activeNoteId === note.id 
-                    ? 'bg-gradient-to-r from-indigo-50 to-purple-50 border-indigo-200 shadow-lg scale-105' 
-                    : 'bg-white/80 hover:bg-white hover:shadow-md'
-                } ${animatingNotes.has(note.id) ? 'animate-pulse' : ''}`}
-                style={{
-                  animationDelay: `${index * 50}ms`,
-                  transform: `perspective(1000px) rotateY(${activeNoteId === note.id ? '0deg' : '1deg'})`,
-                }}
-              >
-                <div className="flex items-center gap-3">
-                  <div 
-                    className="flex items-center gap-3 flex-1 min-w-0"
-                    onClick={() => setActiveNoteId(note.id)}
-                  >
+          {filteredNotes.length === 0 && !loading ? (
+            <div className="text-center py-8">
+              <FileText size={48} className="text-gray-300 mx-auto mb-4" />
+              <p className="text-gray-500">
+                {searchTerm ? 'No notes match your search' : 'No notes yet. Create your first note!'}
+              </p>
+            </div>
+          ) : (
+            filteredNotes.map((note: Note, index: number) => {
+              // Strip HTML tags for preview
+              const contentPreview = note.content.replace(/<[^>]*>/g, '').substring(0, 100);
+              
+              return (
+                <div
+                  key={note.id}
+                  className={`group relative p-4 border border-gray-200/50 cursor-pointer rounded-lg transition-all duration-300 transform hover:scale-105 active:scale-95 ${
+                    activeNoteId === note.id 
+                      ? 'bg-gradient-to-r from-indigo-50 to-purple-50 border-indigo-200 shadow-lg scale-105' 
+                      : 'bg-white/80 hover:bg-white hover:shadow-md'
+                  } ${animatingNotes.has(note.id) ? 'animate-pulse' : ''}`}
+                  style={{
+                    animationDelay: `${index * 50}ms`,
+                    transform: `perspective(1000px) rotateY(${activeNoteId === note.id ? '0deg' : '1deg'})`,
+                  }}
+                  onClick={() => setActiveNoteId(note.id)}
+                >
+                  <div className="flex items-center gap-3">
                     <div className={`p-2 rounded-lg transition-all duration-200 ${
                       activeNoteId === note.id 
                         ? 'bg-indigo-100 text-indigo-600' 
@@ -895,47 +953,21 @@ const LinearPage: React.FC<LinearPageProps> = ({ onBack, onSignOut }) => {
                         {contentPreview || 'No content'}
                       </p>
                       <p className="text-xs text-gray-400 mt-1">
-                        {formatDate(note.createdAt)}
+                        {formatDate(note.updatedAt)}
                       </p>
                     </div>
                   </div>
-                  <div className="relative delete-menu">
-                    <button
-                      onClick={(e: React.MouseEvent) => {
-                        e.stopPropagation();
-                        setShowDeleteMenu(showDeleteMenu === note.id ? null : note.id);
-                      }}
-                      className="p-2 hover:bg-gray-200 rounded-lg transition-all duration-200 transform hover:scale-110 active:scale-95 opacity-0 group-hover:opacity-100"
-                      type="button"
-                    >
-                      <MoreHorizontal size={14} className="text-gray-400" />
-                    </button>
-                    {showDeleteMenu === note.id && (
-                      <div className="absolute right-0 top-12 bg-white border border-gray-200 rounded-lg shadow-xl z-20 transform origin-top-right animate-in fade-in zoom-in-95 duration-200">
-                        <button
-                          onClick={(e: React.MouseEvent) => {
-                            e.stopPropagation();
-                            deleteNote(note.id);
-                          }}
-                          className="block w-full px-4 py-2 text-left text-sm text-red-600 hover:bg-red-50 transition-all duration-200 rounded-lg"
-                          type="button"
-                        >
-                          Delete
-                        </button>
-                      </div>
-                    )}
-                  </div>
+                  
+                  {/* Animated border */}
+                  <div className={`absolute inset-0 rounded-lg transition-all duration-300 ${
+                    activeNoteId === note.id 
+                      ? 'bg-gradient-to-r from-indigo-500/20 to-purple-500/20 opacity-100' 
+                      : 'opacity-0'
+                  }`}></div>
                 </div>
-                
-                {/* Animated border */}
-                <div className={`absolute inset-0 rounded-lg transition-all duration-300 ${
-                  activeNoteId === note.id 
-                    ? 'bg-gradient-to-r from-indigo-500/20 to-purple-500/20 opacity-100' 
-                    : 'opacity-0'
-                }`}></div>
-              </div>
-            );
-          })}
+              );
+            })
+          )}
         </div>
       </div>
 
@@ -954,11 +986,6 @@ const LinearPage: React.FC<LinearPageProps> = ({ onBack, onSignOut }) => {
 
       {/* Main Content */}
       <div className="flex-1 flex flex-col relative">
-        {/* Profile Dropdown - Top Right Corner */}
-        <div className="absolute top-4 right-4 z-20">
-          <ProfileDropdown user={currentUser} onSignOut={onSignOut} />
-        </div>
-
         {/* Background Pattern */}
         <div className="absolute inset-0 opacity-5">
           <div className="absolute inset-0 bg-gradient-to-br from-indigo-500/10 via-purple-500/10 to-pink-500/10"></div>
@@ -988,6 +1015,9 @@ const LinearPage: React.FC<LinearPageProps> = ({ onBack, onSignOut }) => {
                   content={activeNote.content}
                   onChange={(content: string) => updateNoteContent(activeNote.id, content)}
                   placeholder="Start writing your thoughts... Select text to highlight as code or math!"
+                  onEscape={() => {
+                    // Additional escape handling if needed
+                  }}
                 />
               </div>
             </div>
@@ -998,8 +1028,21 @@ const LinearPage: React.FC<LinearPageProps> = ({ onBack, onSignOut }) => {
               <div className="w-24 h-24 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-full flex items-center justify-center mx-auto mb-4 shadow-2xl transform hover:scale-110 transition-all duration-300">
                 <FileText size={32} className="text-white" />
               </div>
-              <p className="text-xl font-medium text-gray-600 mb-2">Select a note to start writing</p>
+              <p className="text-xl font-medium text-gray-600 mb-2">
+                {notes.length === 0 ? 'Create your first note' : 'Select a note to start writing'}
+              </p>
               <p className="text-gray-500">Create rich content with code and math highlighting!</p>
+              {notes.length === 0 && (
+                <button
+                  onClick={createNewNote}
+                  disabled={saving}
+                  className="mt-4 px-6 py-3 bg-gradient-to-r from-indigo-600 to-purple-600 text-white rounded-lg hover:from-indigo-700 hover:to-purple-700 transition-all duration-300 transform hover:scale-105 active:scale-95 shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
+                  type="button"
+                >
+                  <Plus size={20} className="inline mr-2" />
+                  Create First Note
+                </button>
+              )}
             </div>
           </div>
         )}

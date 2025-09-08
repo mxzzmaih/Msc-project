@@ -1,9 +1,11 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { ArrowRight, FileText, Edit3, Brain, Sparkles } from 'lucide-react';
-import AuthWrapper from './AuthWrapper'; // New wrapper component
-import LinearPage from './linear/components/linearpage'; // Import Linear page
+import { ArrowRight, FileText, Edit3, Brain, Mic } from 'lucide-react';
+import { onAuthStateChanged, User as FirebaseUser } from 'firebase/auth';
+import { auth } from './firebase/config'; // Adjust path as needed
+import AuthPage from './sign-up/page';
+import LinearPage from './linear/components/linearpage';
 
 // Type definitions for database connection
 interface DatabaseConnectionResult {
@@ -20,127 +22,66 @@ interface DatabaseDetails {
   [key: string]: any;
 }
 
-// Database connection utility
+// Updated User interface (simplified)
+interface User {
+  id: string;
+  email: string;
+  name: string;
+}
+
+// Real database connection utility (no logging)
 const checkDatabaseConnection = async (): Promise<DatabaseConnectionResult> => {
+  const startTime = performance.now();
+  
   try {
-    // Simulate API call to check database status
     const response = await fetch('/api/health-check', {
       method: 'GET',
       headers: {
         'Content-Type': 'application/json',
       },
-      // Add timeout
-      signal: AbortSignal.timeout(5000)
+      signal: AbortSignal.timeout(10000) // 10 second timeout
     });
+
+    const endTime = performance.now();
+    const latency = Math.round(endTime - startTime);
 
     if (response.ok) {
       const data: DatabaseDetails = await response.json();
-      if (data.database === 'connected') {
-        console.log('🎉✨ Database Connection Status: CONNECTED! 🚀💚');
-        console.log('📊 Database Details:', {
-          status: '🟢 Online',
-          latency: `⚡ ${data.latency || 'Unknown'}ms`,
-          server: `🖥️ ${data.server || 'Primary'}`,
-          timestamp: `⏰ ${new Date().toISOString()}`
-        });
-        return { connected: true, details: data };
-      } else {
-        throw new Error('Database reported as disconnected');
-      }
+      return { 
+        connected: true, 
+        details: data,
+        latency 
+      };
     } else {
       throw new Error(`HTTP ${response.status}: ${response.statusText}`);
     }
   } catch (error: unknown) {
     const err = error as Error;
+    const endTime = performance.now();
+    const latency = Math.round(endTime - startTime);
     
-    if (err.name === 'TimeoutError') {
-      console.error('⏳❌ Database Connection Status: TIMEOUT! 🔥💔');
-      console.error('🚨 Connection timed out after 5 seconds');
-    } else if (err.name === 'TypeError' && err.message.includes('fetch')) {
-      console.error('🌐❌ Database Connection Status: NETWORK ERROR! 📡💔');
-      console.error('🚨 Unable to reach database server - check your internet connection');
-    } else {
-      console.error('💥❌ Database Connection Status: FAILED! 🛑💔');
-      console.error('🔍 Error Details:', {
-        message: `📝 ${err.message}`,
-        type: `🏷️ ${err.name || 'Unknown'}`,
-        timestamp: `⏰ ${new Date().toISOString()}`
-      });
-    }
-    
-    // Log troubleshooting tips
-    console.warn('🔧💡 Troubleshooting Tips:');
-    console.warn('  1. 🔌 Check if database server is running');
-    console.warn('  2. 🌐 Verify network connectivity');
-    console.warn('  3. 🔑 Validate database credentials');
-    console.warn('  4. 🔥 Check firewall settings');
-    
-    return { connected: false, error: err.message };
+    return { 
+      connected: false, 
+      error: err.message,
+      latency 
+    };
   }
 };
 
-// Mock database health check for demo (since we don't have a real backend)
-const mockDatabaseCheck = (): Promise<DatabaseConnectionResult> => {
-  return new Promise<DatabaseConnectionResult>((resolve) => {
-    setTimeout(() => {
-      // Simulate random connection success/failure for demo
-      const isConnected = Math.random() > 0.3; // 70% success rate
-      
-      if (isConnected) {
-        console.log('🎉✨ Database Connection Status: CONNECTED! 🚀💚');
-        console.log('📊 Mock Database Details:', {
-          status: '🟢 Online',
-          latency: `⚡ ${Math.floor(Math.random() * 50) + 10}ms`,
-          server: '🖥️ Primary Node',
-          version: '🔖 PostgreSQL 15.2',
-          connections: `👥 ${Math.floor(Math.random() * 100) + 20}/200`,
-          uptime: '⏱️ 99.9%',
-          timestamp: `⏰ ${new Date().toISOString()}`
-        });
-        resolve({ connected: true, latency: Math.floor(Math.random() * 50) + 10 });
-      } else {
-        const errors = [
-          'Connection refused by server',
-          'Authentication failed',
-          'Network timeout',
-          'Database is under maintenance',
-          'Too many connections'
-        ];
-        const randomError = errors[Math.floor(Math.random() * errors.length)];
-        
-        console.error('💥❌ Database Connection Status: FAILED! 🛑💔');
-        console.error('🔍 Mock Error Details:', {
-          message: `📝 ${randomError}`,
-          type: '🏷️ ConnectionError',
-          server: '🖥️ db.notecanvas.com:5432',
-          retryCount: `🔄 ${Math.floor(Math.random() * 3) + 1}/3`,
-          timestamp: `⏰ ${new Date().toISOString()}`
-        });
-        
-        console.warn('🔧💡 Troubleshooting Tips:');
-        console.warn('  1. 🔌 Check if database server is running');
-        console.warn('  2. 🌐 Verify network connectivity');
-        console.warn('  3. 🔑 Validate database credentials');
-        console.warn('  4. 🔥 Check firewall settings');
-        console.warn('  5. 📊 Monitor connection pool status');
-        
-        resolve({ connected: false, error: randomError });
-      }
-    }, Math.random() * 2000 + 500); // Random delay 0.5-2.5s
-  });
-};
+// Particle type definition
+interface Particle {
+  id: number;
+  className: string;
+  style: {
+    left: string;
+    top: string;
+    animationDelay: string;
+    animationDuration: string;
+  };
+}
 
-function AnimatedParticles() {
-  const [particles, setParticles] = useState<Array<{
-    id: number;
-    className: string;
-    style: {
-      left: string;
-      top: string;
-      animationDelay: string;
-      animationDuration: string;
-    };
-  }>>([]);
+const AnimatedParticles: React.FC = () => {
+  const [particles, setParticles] = useState<Particle[]>([]);
 
   useEffect(() => {
     setParticles([...Array(16)].map((_, i) => ({
@@ -166,13 +107,18 @@ function AnimatedParticles() {
       ))}
     </div>
   );
+};
+
+interface FloatingElementProps {
+  className?: string;
+  gradient?: string;
 }
 
-function FloatingElement({ className = "", gradient = "from-indigo-500/10 to-purple-500/10" }) {
+const FloatingElement: React.FC<FloatingElementProps> = ({ className = "", gradient = "from-indigo-500/10 to-purple-500/10" }) => {
   return (
     <div className={`absolute rounded-full bg-gradient-to-br ${gradient} blur-3xl animate-pulse-soft ${className}`} />
   );
-}
+};
 
 interface FeatureCardProps {
   icon: React.ComponentType<{ size: number; className?: string }>;
@@ -181,10 +127,10 @@ interface FeatureCardProps {
   delay?: number;
 }
 
-function FeatureCard({ icon: Icon, title, description, delay = 0 }: FeatureCardProps) {
+const FeatureCard: React.FC<FeatureCardProps> = ({ icon: Icon, title, description, delay = 0 }) => {
   return (
     <div 
-      className={`group relative bg-white/10 backdrop-blur-md border border-white/20 rounded-xl p-6 hover:bg-white/20 transition-all duration-500 transform hover:scale-105 hover:-translate-y-2 animate-fade-in-up`}
+      className="group relative bg-white/10 backdrop-blur-md border border-white/20 rounded-xl p-6 hover:bg-white/20 transition-all duration-500 transform hover:scale-105 hover:-translate-y-2 animate-fade-in-up"
       style={{ animationDelay: `${delay}s` }}
     >
       <div className="absolute inset-0 bg-gradient-to-br from-indigo-500/5 to-purple-500/5 rounded-xl opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
@@ -204,12 +150,13 @@ function FeatureCard({ icon: Icon, title, description, delay = 0 }: FeatureCardP
       </div>
     </div>
   );
-}
+};
 
-export default function HomePage() {
-  const [showAuth, setShowAuth] = useState(false);
-  const [showLinear, setShowLinear] = useState(false);
-  const [isLoaded, setIsLoaded] = useState(false);
+// Updated HomePage component with auth logic and no debugging
+const HomePage: React.FC = () => {
+  const [currentPage, setCurrentPage] = useState<'home' | 'auth' | 'linear'>('home');
+  const [isLoaded, setIsLoaded] = useState<boolean>(false);
+  const [user, setUser] = useState<FirebaseUser | null>(null);
   const [dbStatus, setDbStatus] = useState<{
     connected: boolean;
     checking: boolean;
@@ -221,29 +168,26 @@ export default function HomePage() {
     return () => clearTimeout(timer);
   }, []);
 
+  // Firebase auth state listener
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, (firebaseUser) => {
+      setUser(firebaseUser);
+    });
+    return () => unsubscribe();
+  }, []);
+
   // Database connection check on component mount
   useEffect(() => {
-    const initializeApp = async () => {
-      console.log('🚀 NoteCanvas Application Starting...');
-      console.log('🔄 Initializing database connection check...');
-      
+    const initializeApp = async (): Promise<void> => {
       try {
-        // Use mock check for demo - replace with real checkDatabaseConnection() in production
-        const result: DatabaseConnectionResult = await mockDatabaseCheck();
+        const result: DatabaseConnectionResult = await checkDatabaseConnection();
         
         setDbStatus({
           connected: result.connected,
           checking: false,
           error: result.error
         });
-
-        if (result.connected) {
-          console.log('✅ Application ready! Database is online and responsive 🎊');
-        } else {
-          console.warn('⚠️ Application started with database issues - some features may be limited');
-        }
       } catch (error: unknown) {
-        console.error('🚨 Critical error during app initialization:', error);
         const errorMessage = error instanceof Error ? error.message : 'Unknown initialization error';
         setDbStatus({
           connected: false,
@@ -260,59 +204,73 @@ export default function HomePage() {
   useEffect(() => {
     if (!dbStatus.checking) {
       const healthCheck = setInterval(async () => {
-        console.log('🔄 Performing periodic database health check...');
         try {
-          const result: DatabaseConnectionResult = await mockDatabaseCheck();
+          const result: DatabaseConnectionResult = await checkDatabaseConnection();
+          
           setDbStatus(prev => ({
             ...prev,
             connected: result.connected,
             error: result.error
           }));
         } catch (error: unknown) {
-          console.error('🚨 Health check failed:', error);
+          // Silent health check failure
         }
       }, 30000);
 
       return () => clearInterval(healthCheck);
     }
-  }, [dbStatus.checking]);
+  }, [dbStatus.checking, dbStatus.connected]);
 
-  // Handler for when user signs out - navigates back to homepage
-  const handleSignOut = () => {
-    setShowLinear(false);
-    setShowAuth(false);
-    // Force a clean state reset
-    setTimeout(() => {
-      setIsLoaded(false);
-      setTimeout(() => setIsLoaded(true), 100);
-    }, 100);
-  };
-
-  // Handler for successful authentication - navigates to Linear page
-  const handleAuthSuccess = () => {
-    if (!dbStatus.connected) {
-      console.warn('⚠️ User attempting to authenticate with database offline - proceeding with limited functionality');
+  // Get Started handler with auth logic
+  const handleGetStarted = (): void => {
+    if (dbStatus.checking) {
+      return;
     }
-    setShowAuth(false);
-    setShowLinear(true);
+
+    if (!user) {
+      // User not signed in, redirect to auth page
+      setCurrentPage('auth');
+    } else {
+      // User is signed in, go directly to linear page
+      setCurrentPage('linear');
+    }
   };
 
-  // Show Linear page if user is authenticated
-  if (showLinear) {
+  // Handler to go to auth page
+  const handleGoToAuth = (): void => {
+    setCurrentPage('auth');
+  };
+
+  // Handler for successful authentication
+  const handleAuthSuccess = (user: any): void => {
+    setCurrentPage('linear');
+  };
+
+  // Handler for sign out
+  const handleSignOut = (): void => {
+    setCurrentPage('home');
+  };
+
+  // Handler to go back to home
+  const handleBackToHome = (): void => {
+    setCurrentPage('home');
+  };
+
+  // Render based on current page
+  if (currentPage === 'auth') {
     return (
-      <LinearPage 
-        onBack={() => setShowLinear(false)} 
-        onSignOut={handleSignOut}
+      <AuthPage 
+        onBack={handleBackToHome}
+        onAuthSuccess={handleAuthSuccess}
       />
     );
   }
 
-  // Show authentication page
-  if (showAuth) {
+  if (currentPage === 'linear') {
     return (
-      <AuthWrapper 
-        onBack={() => setShowAuth(false)} 
-        onAuthSuccess={handleAuthSuccess}
+      <LinearPage 
+        onBack={handleBackToHome}
+        onSignOut={handleSignOut}
       />
     );
   }
@@ -330,21 +288,6 @@ export default function HomePage() {
       <FloatingElement className="w-96 h-96 top-1/4 left-1/6 animate-float-slow" gradient="from-indigo-500/10 to-purple-500/10" />
       <FloatingElement className="w-72 h-72 bottom-1/3 right-1/5 animate-float-slower" gradient="from-purple-500/10 to-pink-500/10" />
       <FloatingElement className="w-48 h-48 top-1/3 right-1/4 animate-float-slow" gradient="from-blue-500/10 to-indigo-500/10" />
-
-      {/* Database Status Indicator (only visible in dev) */}
-      {process.env.NODE_ENV === 'development' && (
-        <div className="absolute top-4 right-4 z-50">
-          <div className={`px-3 py-2 rounded-lg text-xs font-medium ${
-            dbStatus.checking 
-              ? 'bg-yellow-500/20 text-yellow-300 border border-yellow-500/30' 
-              : dbStatus.connected 
-                ? 'bg-green-500/20 text-green-300 border border-green-500/30'
-                : 'bg-red-500/20 text-red-300 border border-red-500/30'
-          }`}>
-            {dbStatus.checking ? '🔄 Checking DB...' : dbStatus.connected ? '🟢 DB Online' : '🔴 DB Offline'}
-          </div>
-        </div>
-      )}
 
       {/* Main content */}
       <div className={`relative z-10 text-center space-y-8 px-6 max-w-4xl transition-all duration-1000 ${isLoaded ? 'animate-fade-in-up' : 'opacity-0 translate-y-10'}`}>
@@ -374,7 +317,7 @@ export default function HomePage() {
           </h1>
           
           <p className="text-gray-300 text-lg md:text-xl max-w-2xl mx-auto leading-relaxed animate-fade-in-delayed-1">
-            Transform your thoughts into beautiful, organized notes. Experience the future of digital note-taking with our intuitive canvas.
+            Transform your thoughts into beautiful & interactive notes 
           </p>
         </div>
 
@@ -383,19 +326,19 @@ export default function HomePage() {
           <FeatureCard 
             icon={Edit3}
             title="Intuitive Writing"
-            description="Write naturally with our distraction-free interface designed for focus and creativity."
+            description="Write naturally with our smart editor that adapts to your style"
             delay={0.5}
           />
           <FeatureCard 
             icon={Brain}
             title="Mind Mapping"
-            description="Visualize your thoughts with intelligent mind maps that connect your ideas seamlessly."
+            description="Create visual connections between your ideas and concepts"
             delay={0.7}
           />
           <FeatureCard 
-            icon={Sparkles}
-            title="Smart Organization"
-            description="Automatically organize and categorize your notes with powerful search and tagging."
+            icon={Mic}
+            title="Voice to Text"
+            description="Speak your thoughts and watch them transform into organized notes"
             delay={0.9}
           />
         </div>
@@ -403,23 +346,28 @@ export default function HomePage() {
         {/* Action buttons */}
         <div className="flex flex-col sm:flex-row items-center justify-center gap-4 mt-16 animate-fade-in-delayed-2">
           <button
-            onClick={() => setShowAuth(true)}
+            onClick={handleGetStarted}
             className="group relative"
             disabled={dbStatus.checking}
+            type="button"
           >
             <div className="absolute inset-0 bg-gradient-to-r from-indigo-500/20 to-purple-500/20 rounded-xl blur-md opacity-50 group-hover:opacity-100 transition-opacity duration-500" />
             <div className={`relative bg-gradient-to-r from-indigo-600 to-purple-600 text-white text-lg px-8 py-4 rounded-xl font-semibold transition-all duration-300 ease-out transform hover:scale-105 hover:-translate-y-2 active:scale-95 flex items-center gap-3 shadow-2xl ${
               dbStatus.checking ? 'opacity-50 cursor-not-allowed' : ''
             }`}>
-              {dbStatus.checking ? 'Starting...' : 'Get Started'}
+              {dbStatus.checking ? 'Starting...' : user ? 'Get Started' : 'Get Started'}
               <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform duration-300" />
             </div>
           </button>
           
-          <button className="group relative">
+          <button 
+            onClick={handleGoToAuth}
+            className="group relative"
+            type="button"
+          >
             <div className="absolute inset-0 bg-white/10 rounded-xl blur-md opacity-50 group-hover:opacity-100 transition-opacity duration-500" />
             <div className="relative bg-transparent border-2 border-white/30 text-white text-lg px-8 py-4 rounded-xl font-semibold transition-all duration-300 ease-out transform hover:scale-105 hover:-translate-y-2 active:scale-95 hover:bg-white/10 hover:border-white/50 shadow-lg">
-              Learn More
+              {user ? 'Account' : 'Sign In'}
             </div>
           </button>
         </div>
@@ -427,22 +375,23 @@ export default function HomePage() {
         {/* Stats or additional info */}
         <div className="flex flex-col sm:flex-row items-center justify-center gap-8 mt-16 text-center animate-fade-in-delayed-3">
           <div className="group">
-            <div className="text-3xl font-bold text-white mb-1 group-hover:text-indigo-400 transition-colors duration-300">10K+</div>
+            <div className="text-2xl font-bold text-white mb-1">10K+</div>
             <div className="text-gray-400 text-sm">Active Users</div>
           </div>
           <div className="hidden sm:block w-px h-8 bg-gray-600"></div>
           <div className="group">
-            <div className="text-3xl font-bold text-white mb-1 group-hover:text-purple-400 transition-colors duration-300">50K+</div>
+            <div className="text-2xl font-bold text-white mb-1">50K+</div>
             <div className="text-gray-400 text-sm">Notes Created</div>
           </div>
           <div className="hidden sm:block w-px h-8 bg-gray-600"></div>
           <div className="group">
-            <div className="text-3xl font-bold text-white mb-1 group-hover:text-pink-400 transition-colors duration-300">99%</div>
-            <div className="text-gray-400 text-sm">Satisfaction</div>
+            <div className="text-2xl font-bold text-white mb-1">99.9%</div>
+            <div className="text-gray-400 text-sm">Uptime</div>
           </div>
         </div>
       </div>
 
+      {/* Styles */}
       <style jsx global>{`
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap');
         
@@ -455,10 +404,6 @@ export default function HomePage() {
             linear-gradient(rgba(255,255,255,0.03) 1px, transparent 1px),
             linear-gradient(90deg, rgba(255,255,255,0.03) 1px, transparent 1px);
           background-size: 80px 80px;
-        }
-
-        .bg-gradient-radial {
-          background: radial-gradient(ellipse at center, var(--tw-gradient-stops));
         }
 
         @keyframes fade-in-up {
@@ -588,7 +533,7 @@ export default function HomePage() {
 
         .animate-float-slower {
           animation: float-slower 28s cubic-bezier(0.4, 0, 0.6, 1) infinite;
-          will-change: transform;
+          will-change: opacity, transform;
         }
 
         @keyframes pulse-soft {
@@ -641,4 +586,6 @@ export default function HomePage() {
       `}</style>
     </div>
   );
-}
+};
+
+export default HomePage;

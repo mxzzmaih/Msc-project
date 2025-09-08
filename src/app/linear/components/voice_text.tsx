@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Mic, MicOff, Square, Play, Pause, Download, Copy, Trash2, ArrowLeft } from 'lucide-react';
+import { Mic, MicOff, Square, Play, Pause, Download, Copy, Trash2, ArrowLeft, Volume2 } from 'lucide-react';
 
 interface VoiceTranscriptionPageProps {
   onBack?: () => void;
@@ -15,21 +15,53 @@ const VoiceTranscriptionPage: React.FC<VoiceTranscriptionPageProps> = ({ onBack 
   const [apiStatus, setApiStatus] = useState<'checking' | 'available' | 'unavailable' | 'unknown'>('unknown');
   const [retryCount, setRetryCount] = useState(0);
   const [debugInfo, setDebugInfo] = useState<string>('');
+  const [recordingDuration, setRecordingDuration] = useState(0);
+  const [copySuccess, setCopySuccess] = useState(false);
   
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioRef = useRef<HTMLAudioElement>(null);
   const chunksRef = useRef<Blob[]>([]);
+  const intervalRef = useRef<NodeJS.Timeout | null>(null);
 
   useEffect(() => {
-    // Check API availability on component mount
     checkApiAvailability();
     
     return () => {
       if (audioUrl) {
         URL.revokeObjectURL(audioUrl);
       }
+      if (intervalRef.current) {
+        clearInterval(intervalRef.current);
+      }
     };
   }, [audioUrl]);
+
+  useEffect(() => {
+    if (isRecording) {
+      intervalRef.current = setInterval(() => {
+        setRecordingDuration(prev => prev + 1);
+      }, 1000);
+    } else {
+      if (intervalRef.current) {
+        clearInterval(intervalRef.current);
+      }
+      if (!audioUrl) {
+        setRecordingDuration(0);
+      }
+    }
+
+    return () => {
+      if (intervalRef.current) {
+        clearInterval(intervalRef.current);
+      }
+    };
+  }, [isRecording, audioUrl]);
+
+  const formatDuration = (seconds: number) => {
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${mins}:${secs.toString().padStart(2, '0')}`;
+  };
 
   const checkApiAvailability = async () => {
     setApiStatus('checking');
@@ -41,13 +73,12 @@ const VoiceTranscriptionPage: React.FC<VoiceTranscriptionPageProps> = ({ onBack 
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ audio: '' }), // Empty test request
+        body: JSON.stringify({ audio: '' }),
       });
       
       setDebugInfo(`📡 API Response: ${response.status} ${response.statusText}`);
       
       if (response.status === 400) {
-        // 400 means API is available but missing audio data (expected)
         setApiStatus('available');
         setError('');
         setDebugInfo('✅ API endpoint available and configured correctly');
@@ -73,7 +104,6 @@ const VoiceTranscriptionPage: React.FC<VoiceTranscriptionPageProps> = ({ onBack 
   };
 
   const startRecording = async () => {
-    // Check API availability before recording
     if (apiStatus === 'unavailable') {
       setError('Transcription service is not available.');
       setDebugInfo(`🚫 Recording blocked - API status: ${apiStatus}`);
@@ -81,7 +111,7 @@ const VoiceTranscriptionPage: React.FC<VoiceTranscriptionPageProps> = ({ onBack 
     }
 
     try {
-      setError(''); // Clear previous errors
+      setError('');
       setDebugInfo('🎤 Requesting microphone access...');
       
       const stream = await navigator.mediaDevices.getUserMedia({ 
@@ -94,7 +124,6 @@ const VoiceTranscriptionPage: React.FC<VoiceTranscriptionPageProps> = ({ onBack 
       
       setDebugInfo('🔍 Checking supported audio formats...');
       
-      // Check if the browser supports the required audio format
       const mimeTypes = [
         'audio/webm;codecs=opus',
         'audio/webm',
@@ -149,7 +178,6 @@ const VoiceTranscriptionPage: React.FC<VoiceTranscriptionPageProps> = ({ onBack 
           setDebugInfo(`❌ Recording processing error: ${error.message}`);
         }
         
-        // Stop all tracks
         stream.getTracks().forEach(track => track.stop());
       };
       
@@ -163,6 +191,7 @@ const VoiceTranscriptionPage: React.FC<VoiceTranscriptionPageProps> = ({ onBack 
       mediaRecorder.start();
       setIsRecording(true);
       setRetryCount(0);
+      setRecordingDuration(0);
       setDebugInfo('🔴 Recording started successfully');
       
     } catch (err: any) {
@@ -198,14 +227,12 @@ const VoiceTranscriptionPage: React.FC<VoiceTranscriptionPageProps> = ({ onBack 
     try {
       setDebugInfo(`🔄 Starting transcription attempt ${attempt}/${maxRetries}`);
       
-      // Convert to base64
       const base64Audio = await blobToBase64(audioBlob);
       const base64Size = base64Audio.length;
       const audioDataSize = base64Audio.split(',')[1]?.length || 0;
       
       setDebugInfo(`📦 Audio encoded: ${base64Size} chars total, ${audioDataSize} chars data`);
       
-      // Call your API route
       const requestStart = Date.now();
       const response = await fetch('/api/transcribe', {
         method: 'POST',
@@ -213,7 +240,7 @@ const VoiceTranscriptionPage: React.FC<VoiceTranscriptionPageProps> = ({ onBack 
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          audio: base64Audio.split(',')[1], // Remove data:audio/webm;base64, prefix
+          audio: base64Audio.split(',')[1],
         }),
       });
       
@@ -242,7 +269,6 @@ const VoiceTranscriptionPage: React.FC<VoiceTranscriptionPageProps> = ({ onBack 
           `HTTP ${response.status}: ${errorData.error || response.statusText}`;
         
         if (response.status >= 500 && attempt < maxRetries) {
-          // Retry on server errors
           setDebugInfo(`🔄 Retrying due to server error (${attempt}/${maxRetries})`);
           setRetryCount(attempt);
           setTimeout(() => transcribeAudio(audioBlob, attempt + 1), 1000 * attempt);
@@ -261,7 +287,7 @@ const VoiceTranscriptionPage: React.FC<VoiceTranscriptionPageProps> = ({ onBack 
       
       if (data.transcript) {
         setTranscript(data.transcript);
-        setError(''); // Clear any previous errors on success
+        setError('');
         setDebugInfo(`🎉 Transcription successful: ${data.transcript.length} characters`);
         
         if (data.confidence) {
@@ -298,7 +324,6 @@ const VoiceTranscriptionPage: React.FC<VoiceTranscriptionPageProps> = ({ onBack 
         errorMessage += err.message || 'Unknown error occurred.';
       }
       
-      // Add retry information if applicable
       if (attempt < maxRetries && (err.message.includes('500') || err.name === 'NetworkError')) {
         errorMessage += ` Retrying... (${attempt}/${maxRetries})`;
         debugMessage += ` | Retrying in ${1000 * attempt}ms`;
@@ -344,8 +369,8 @@ const VoiceTranscriptionPage: React.FC<VoiceTranscriptionPageProps> = ({ onBack 
   const copyToClipboard = async () => {
     try {
       await navigator.clipboard.writeText(transcript);
-      // You could add a toast notification here
-      console.log('Transcript copied to clipboard');
+      setCopySuccess(true);
+      setTimeout(() => setCopySuccess(false), 2000);
     } catch (err) {
       console.error('Failed to copy to clipboard:', err);
       setError('Failed to copy to clipboard. Please select and copy the text manually.');
@@ -375,6 +400,7 @@ const VoiceTranscriptionPage: React.FC<VoiceTranscriptionPageProps> = ({ onBack 
       setError('');
       setIsPlaying(false);
       setRetryCount(0);
+      setRecordingDuration(0);
       if (audioUrl) {
         URL.revokeObjectURL(audioUrl);
       }
@@ -385,7 +411,6 @@ const VoiceTranscriptionPage: React.FC<VoiceTranscriptionPageProps> = ({ onBack 
 
   const retryTranscription = () => {
     if (audioUrl) {
-      // Recreate blob from audio URL and retry
       fetch(audioUrl)
         .then(response => response.blob())
         .then(audioBlob => transcribeAudio(audioBlob))
@@ -397,205 +422,563 @@ const VoiceTranscriptionPage: React.FC<VoiceTranscriptionPageProps> = ({ onBack 
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 p-4">
-      <div className="max-w-4xl mx-auto">
+    <div 
+      className="min-h-screen"
+      style={{ 
+        background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+        fontFamily: "'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif"
+      }}
+    >
+      {/* Animated background elements */}
+      <div className="absolute inset-0 overflow-hidden pointer-events-none">
+        <div 
+          className="absolute -top-40 -left-40 w-80 h-80 rounded-full opacity-20 animate-pulse"
+          style={{ background: 'radial-gradient(circle, rgba(255,255,255,0.3) 0%, transparent 70%)' }}
+        ></div>
+        <div 
+          className="absolute top-1/2 -right-20 w-60 h-60 rounded-full opacity-10 animate-bounce"
+          style={{ 
+            background: 'radial-gradient(circle, rgba(255,255,255,0.2) 0%, transparent 70%)',
+            animationDuration: '3s'
+          }}
+        ></div>
+        <div 
+          className="absolute bottom-20 left-1/4 w-40 h-40 rounded-full opacity-15 animate-pulse"
+          style={{ 
+            background: 'radial-gradient(circle, rgba(255,255,255,0.25) 0%, transparent 70%)',
+            animationDelay: '1s'
+          }}
+        ></div>
+      </div>
+
+      <div className="relative z-10 max-w-4xl mx-auto p-6">
         {/* Header */}
-        <div className="text-center mb-8">
-          <div className="flex items-center justify-center gap-4 mb-4">
+        <div className="mb-12">
+          <div className="flex items-center gap-4 mb-8">
             {onBack && (
               <button
                 onClick={onBack}
-                className="p-3 hover:bg-white/50 rounded-full transition-all duration-200 transform hover:scale-105 active:scale-95 shadow-md hover:shadow-lg backdrop-blur-sm border border-white/20"
+                className="group p-3 hover:bg-white/10 transition-all duration-300 backdrop-blur-sm"
+                style={{ 
+                  borderRadius: '12px',
+                  border: '1px solid rgba(255,255,255,0.2)'
+                }}
                 title="Back to Notes"
               >
-                <ArrowLeft size={20} className="text-gray-700" />
+                <ArrowLeft 
+                  size={20} 
+                  className="text-white/80 group-hover:text-white transition-colors duration-300" 
+                />
               </button>
             )}
-            <div className="flex-1">
-              <h1 className="text-4xl font-bold text-gray-900 mb-2">
-                Voice to Text Transcription
+            <div className="flex-1 text-center">
+              <h1 style={{ 
+                fontSize: '3rem', 
+                fontWeight: 700, 
+                lineHeight: 1.1, 
+                color: '#FFFFFF',
+                margin: 0,
+                marginBottom: '12px',
+                textShadow: '0 2px 4px rgba(0,0,0,0.1)'
+              }}>
+                Voice Transcription
               </h1>
-              <p className="text-gray-600 max-w-2xl mx-auto">
-                Record your voice and get an accurate transcription using Deepgram's Speech-to-Text API
+              <p style={{ 
+                fontSize: '1.125rem', 
+                color: 'rgba(255,255,255,0.9)', 
+                lineHeight: 1.6,
+                margin: 0,
+                maxWidth: '600px',
+                marginLeft: 'auto',
+                marginRight: 'auto'
+              }}>
+                
               </p>
             </div>
           </div>
         </div>
 
         {/* Main Card */}
-        <div className="bg-white rounded-xl shadow-lg p-6 mb-6">
-          {/* Recording Controls */}
-          <div className="text-center mb-8">
-            <div className="flex justify-center items-center gap-4 mb-4">
-              <button
-                onClick={isRecording ? stopRecording : startRecording}
-                disabled={isLoading || apiStatus === 'unavailable'}
-                className={`relative p-4 rounded-full transition-all duration-200 ${
-                  isRecording
-                    ? 'bg-red-500 hover:bg-red-600 text-white shadow-lg scale-110'
-                    : apiStatus === 'unavailable'
-                    ? 'bg-gray-400 cursor-not-allowed text-white'
-                    : 'bg-blue-500 hover:bg-blue-600 text-white shadow-md hover:scale-105'
-                } disabled:opacity-50 disabled:cursor-not-allowed`}
-                title={
-                  apiStatus === 'unavailable' 
-                    ? 'Please complete the setup first' 
-                    : isRecording 
-                    ? 'Click to stop recording' 
-                    : 'Click to start recording'
-                }
-              >
-                {isRecording ? (
-                  <Square className="w-6 h-6" />
-                ) : (
-                  <Mic className="w-6 h-6" />
-                )}
-                {isRecording && (
-                  <div className="absolute inset-0 rounded-full bg-red-400 animate-ping opacity-75"></div>
-                )}
-              </button>
-              
-              {audioUrl && (
-                <button
-                  onClick={togglePlayback}
-                  className="p-3 rounded-full bg-gray-100 hover:bg-gray-200 transition-colors"
-                >
-                  {isPlaying ? (
-                    <Pause className="w-5 h-5 text-gray-700" />
-                  ) : (
-                    <Play className="w-5 h-5 text-gray-700" />
-                  )}
-                </button>
-              )}
-              
-              {transcript && (
-                <>
-                  <button
-                    onClick={copyToClipboard}
-                    className="p-3 rounded-full bg-green-100 hover:bg-green-200 transition-colors"
-                    title="Copy to clipboard"
-                  >
-                    <Copy className="w-5 h-5 text-green-700" />
-                  </button>
-                  
-                  <button
-                    onClick={downloadTranscript}
-                    className="p-3 rounded-full bg-blue-100 hover:bg-blue-200 transition-colors"
-                    title="Download transcript"
-                  >
-                    <Download className="w-5 h-5 text-blue-700" />
-                  </button>
-                  
-                  <button
-                    onClick={clearAll}
-                    className="p-3 rounded-full bg-red-100 hover:bg-red-200 transition-colors"
-                    title="Clear all"
-                  >
-                    <Trash2 className="w-5 h-5 text-red-700" />
-                  </button>
-                </>
-              )}
-            </div>
-            
-            <p className="text-sm text-gray-500">
-              {apiStatus === 'checking' 
-                ? 'Checking API status...'
-                : apiStatus === 'unavailable'
-                ? 'Please complete the setup instructions below to enable recording'
-                : isRecording 
-                ? 'Recording... Click the stop button when finished'
-                : 'Click the microphone to start recording'
-              }
-            </p>
-          </div>
+        <div 
+          className="backdrop-blur-lg relative overflow-hidden"
+          style={{ 
+            background: 'rgba(255,255,255,0.95)',
+            borderRadius: '24px',
+            boxShadow: '0 25px 50px -12px rgba(0,0,0,0.25), 0 0 0 1px rgba(255,255,255,0.3)',
+            border: '1px solid rgba(255,255,255,0.2)'
+          }}
+        >
+          {/* Subtle gradient overlay */}
+          <div 
+            className="absolute inset-0 opacity-50 pointer-events-none"
+            style={{
+              background: 'linear-gradient(135deg, rgba(103,126,234,0.03) 0%, rgba(118,75,162,0.03) 100%)',
+              borderRadius: '24px'
+            }}
+          ></div>
 
-          {/* Status Messages */}
-          {apiStatus === 'checking' && (
-            <div className="text-center mb-6">
-              <div className="inline-flex items-center gap-2 px-4 py-2 bg-blue-50 text-blue-700 rounded-lg">
-                <div className="w-4 h-4 border-2 border-blue-600 border-t-transparent rounded-full animate-spin"></div>
-                Checking API availability...
-              </div>
-            </div>
-          )}
+          <div className="relative z-10 p-8">
+            {/* Recording Controls */}
+            <div className="text-center mb-12">
+              {/* Main Record Button */}
+              <div className="mb-8">
+                <div className="relative inline-block">
+                  <button
+                    onClick={isRecording ? stopRecording : startRecording}
+                    disabled={isLoading || apiStatus === 'unavailable'}
+                    className={`relative p-6 transition-all duration-300 transform ${
+                      isRecording
+                        ? 'scale-110 shadow-2xl'
+                        : apiStatus === 'unavailable'
+                        ? 'cursor-not-allowed opacity-50'
+                        : 'hover:scale-105 shadow-xl hover:shadow-2xl'
+                    } disabled:opacity-50 disabled:cursor-not-allowed group`}
+                    style={{
+                      borderRadius: '50%',
+                      background: isRecording 
+                        ? 'linear-gradient(135deg, #ef4444 0%, #dc2626 100%)' 
+                        : apiStatus === 'unavailable' 
+                        ? 'linear-gradient(135deg, #9ca3af 0%, #6b7280 100%)' 
+                        : 'linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%)',
+                      color: '#FFFFFF',
+                      border: 'none',
+                      width: '100px',
+                      height: '100px'
+                    }}
+                    title={
+                      apiStatus === 'unavailable' 
+                        ? 'Please complete the setup first' 
+                        : isRecording 
+                        ? 'Click to stop recording' 
+                        : 'Click to start recording'
+                    }
+                  >
+                    {isRecording ? (
+                      <Square className="w-8 h-8" />
+                    ) : (
+                      <Mic className="w-8 h-8" />
+                    )}
+                    
+                    {/* Animated ring for recording */}
+                    {isRecording && (
+                      <>
+                        <div 
+                          className="absolute inset-0 rounded-full animate-ping"
+                          style={{
+                            background: 'linear-gradient(135deg, #ef4444 0%, #dc2626 100%)',
+                            opacity: 0.4
+                          }}
+                        ></div>
+                        <div 
+                          className="absolute inset-0 rounded-full animate-pulse"
+                          style={{
+                            background: 'linear-gradient(135deg, #ef4444 0%, #dc2626 100%)',
+                            opacity: 0.6,
+                            animationDelay: '0.5s'
+                          }}
+                        ></div>
+                      </>
+                    )}
 
-          {isLoading && (
-            <div className="text-center mb-6">
-              <div className="inline-flex items-center gap-2 px-4 py-2 bg-blue-50 text-blue-700 rounded-lg">
-                <div className="w-4 h-4 border-2 border-blue-600 border-t-transparent rounded-full animate-spin"></div>
-                {retryCount > 0 ? `Retrying transcription... (${retryCount}/3)` : 'Transcribing audio...'}
-              </div>
-            </div>
-          )}
-
-          {error && (
-            <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg">
-              <div className="flex items-start justify-between">
-                <div className="flex-1">
-                  <h4 className="text-red-800 font-medium mb-1">Error</h4>
-                  <p className="text-red-700 text-sm">{error}</p>
+                    {/* Hover effect */}
+                    {!isRecording && apiStatus === 'available' && (
+                      <div 
+                        className="absolute inset-0 rounded-full opacity-0 group-hover:opacity-20 transition-opacity duration-300"
+                        style={{
+                          background: 'linear-gradient(135deg, #ffffff 0%, #f3f4f6 100%)'
+                        }}
+                      ></div>
+                    )}
+                  </button>
                 </div>
-                <div className="flex gap-2 ml-4">
-                  {audioUrl && !error.includes('API endpoint not found') && (
-                    <button
-                      onClick={retryTranscription}
-                      className="px-3 py-1 text-xs bg-red-100 hover:bg-red-200 text-red-700 rounded transition-colors"
+
+                {/* Recording Timer */}
+                {(isRecording || audioUrl) && (
+                  <div className="mt-6">
+                    <div 
+                      className="inline-flex items-center gap-3 px-6 py-3 backdrop-blur-sm"
+                      style={{
+                        background: 'rgba(79,70,229,0.1)',
+                        borderRadius: '50px',
+                        border: '1px solid rgba(79,70,229,0.2)'
+                      }}
                     >
-                      Retry
+                      <div className={`w-3 h-3 rounded-full ${isRecording ? 'animate-pulse' : ''}`}
+                        style={{ backgroundColor: isRecording ? '#ef4444' : '#10b981' }}
+                      ></div>
+                      <span style={{ 
+                        fontSize: '1.125rem', 
+                        fontWeight: 600, 
+                        color: '#4f46e5',
+                        fontFamily: "'Source Code Pro', monospace"
+                      }}>
+                        {formatDuration(recordingDuration)}
+                      </span>
+                      {isRecording && <Volume2 className="w-4 h-4 text-blue-600 animate-pulse" />}
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Action Buttons */}
+              {(audioUrl || transcript) && (
+                <div className="flex justify-center items-center gap-4 mb-8">
+                  {audioUrl && (
+                    <button
+                      onClick={togglePlayback}
+                      className="group p-4 hover:bg-gray-50 transition-all duration-300 transform hover:scale-105"
+                      style={{
+                        borderRadius: '16px',
+                        backgroundColor: '#f8fafc',
+                        border: '1px solid #e2e8f0',
+                        boxShadow: '0 4px 6px -1px rgba(0,0,0,0.1)'
+                      }}
+                    >
+                      {isPlaying ? (
+                        <Pause className="w-6 h-6 text-gray-700 group-hover:text-blue-600 transition-colors" />
+                      ) : (
+                        <Play className="w-6 h-6 text-gray-700 group-hover:text-blue-600 transition-colors" />
+                      )}
                     </button>
                   )}
+                  
+                  {transcript && (
+                    <>
+                      <button
+                        onClick={copyToClipboard}
+                        className="group p-4 hover:bg-green-50 transition-all duration-300 transform hover:scale-105 relative"
+                        style={{
+                          borderRadius: '16px',
+                          backgroundColor: copySuccess ? '#dcfce7' : '#f0fdf4',
+                          border: '1px solid #bbf7d0',
+                          boxShadow: '0 4px 6px -1px rgba(0,0,0,0.1)'
+                        }}
+                        title="Copy to clipboard"
+                      >
+                        <Copy className={`w-6 h-6 transition-colors ${copySuccess ? 'text-green-600' : 'text-green-700 group-hover:text-green-600'}`} />
+                        {copySuccess && (
+                          <div className="absolute -top-10 left-1/2 transform -translate-x-1/2 px-2 py-1 bg-green-600 text-white text-xs rounded">
+                            Copied!
+                          </div>
+                        )}
+                      </button>
+                      
+                      <button
+                        onClick={downloadTranscript}
+                        className="group p-4 hover:bg-blue-50 transition-all duration-300 transform hover:scale-105"
+                        style={{
+                          borderRadius: '16px',
+                          backgroundColor: '#eff6ff',
+                          border: '1px solid #bfdbfe',
+                          boxShadow: '0 4px 6px -1px rgba(0,0,0,0.1)'
+                        }}
+                        title="Download transcript"
+                      >
+                        <Download className="w-6 h-6 text-blue-700 group-hover:text-blue-600 transition-colors" />
+                      </button>
+                      
+                      <button
+                        onClick={clearAll}
+                        className="group p-4 hover:bg-red-50 transition-all duration-300 transform hover:scale-105"
+                        style={{
+                          borderRadius: '16px',
+                          backgroundColor: '#fef2f2',
+                          border: '1px solid #fecaca',
+                          boxShadow: '0 4px 6px -1px rgba(0,0,0,0.1)'
+                        }}
+                        title="Clear all"
+                      >
+                        <Trash2 className="w-6 h-6 text-red-700 group-hover:text-red-600 transition-colors" />
+                      </button>
+                    </>
+                  )}
+                </div>
+              )}
+              
+              <p style={{ 
+                fontSize: '1rem', 
+                color: '#64748b', 
+                lineHeight: 1.5,
+                margin: 0,
+                fontWeight: 500
+              }}>
+                {apiStatus === 'checking' 
+                  ? 'Checking API status...'
+                  : apiStatus === 'unavailable'
+                  ? 'Please complete the setup instructions below to enable recording'
+                  : isRecording 
+                  ? 'Recording in progress... Click the stop button when finished'
+                  : 'Click the microphone to start recording your voice'
+                }
+              </p>
+            </div>
+
+            {/* Status Messages */}
+            {apiStatus === 'checking' && (
+              <div className="text-center mb-8">
+                <div 
+                  className="inline-flex items-center gap-3 px-6 py-4 backdrop-blur-sm"
+                  style={{
+                    background: 'linear-gradient(135deg, rgba(59,130,246,0.1) 0%, rgba(147,197,253,0.1) 100%)',
+                    color: '#1d4ed8',
+                    borderRadius: '16px',
+                    border: '1px solid rgba(59,130,246,0.2)',
+                    boxShadow: '0 4px 6px -1px rgba(0,0,0,0.05)'
+                  }}
+                >
+                  <div 
+                    className="w-5 h-5 border-2 border-t-transparent rounded-full animate-spin"
+                    style={{ borderColor: '#3b82f6' }}
+                  ></div>
+                  <span style={{ fontWeight: 600 }}>Checking API availability...</span>
+                </div>
+              </div>
+            )}
+
+            {isLoading && (
+              <div className="text-center mb-8">
+                <div 
+                  className="inline-flex items-center gap-3 px-6 py-4 backdrop-blur-sm"
+                  style={{
+                    background: 'linear-gradient(135deg, rgba(147,51,234,0.1) 0%, rgba(196,181,253,0.1) 100%)',
+                    color: '#7c3aed',
+                    borderRadius: '16px',
+                    border: '1px solid rgba(147,51,234,0.2)',
+                    boxShadow: '0 4px 6px -1px rgba(0,0,0,0.05)'
+                  }}
+                >
+                  <div 
+                    className="w-5 h-5 border-2 border-t-transparent rounded-full animate-spin"
+                    style={{ borderColor: '#7c3aed' }}
+                  ></div>
+                  <span style={{ fontWeight: 600 }}>
+                    {retryCount > 0 ? `Retrying transcription... (${retryCount}/3)` : 'Processing your audio...'}
+                  </span>
+                </div>
+              </div>
+            )}
+
+            {error && (
+              <div 
+                className="mb-8 p-6 backdrop-blur-sm"
+                style={{
+                  background: 'linear-gradient(135deg, rgba(239,68,68,0.1) 0%, rgba(252,165,165,0.1) 100%)',
+                  border: '1px solid rgba(239,68,68,0.2)',
+                  borderRadius: '16px',
+                  boxShadow: '0 4px 6px -1px rgba(0,0,0,0.05)'
+                }}
+              >
+                <div className="flex items-start justify-between">
+                  <div className="flex-1">
+                    <div className="flex items-center gap-2 mb-2">
+                      <div className="w-2 h-2 rounded-full bg-red-500"></div>
+                      <h4 style={{ 
+                        color: '#dc2626', 
+                        fontWeight: 600, 
+                        fontSize: '1rem', 
+                        margin: 0
+                      }}>
+                        Error
+                      </h4>
+                    </div>
+                    <p style={{ 
+                      color: '#991b1b', 
+                      fontSize: '0.875rem', 
+                      lineHeight: 1.5,
+                      margin: 0 
+                    }}>
+                      {error}
+                    </p>
+                  </div>
+                  <div className="flex gap-2 ml-4">
+                    {audioUrl && !error.includes('API endpoint not found') && (
+                      <button
+                        onClick={retryTranscription}
+                        className="px-4 py-2 hover:opacity-80 transition-all duration-200 transform hover:scale-105"
+                        style={{
+                          fontSize: '0.875rem',
+                          backgroundColor: 'rgba(239,68,68,0.1)',
+                          color: '#dc2626',
+                          borderRadius: '8px',
+                          border: '1px solid rgba(239,68,68,0.2)',
+                          fontWeight: 500
+                        }}
+                      >
+                        Retry
+                      </button>
+                    )}
+                    <button
+                      onClick={() => setError('')}
+                      className="px-4 py-2 hover:opacity-80 transition-all duration-200 transform hover:scale-105"
+                      style={{
+                        fontSize: '0.875rem',
+                        backgroundColor: 'rgba(239,68,68,0.1)',
+                        color: '#dc2626',
+                        borderRadius: '8px',
+                        border: '1px solid rgba(239,68,68,0.2)',
+                        fontWeight: 500
+                      }}
+                    >
+                      Dismiss
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {apiStatus === 'unavailable' && !isLoading && (
+              <div 
+                className="mb-8 p-6 backdrop-blur-sm"
+                style={{
+                  background: 'linear-gradient(135deg, rgba(245,158,11,0.1) 0%, rgba(252,211,77,0.1) 100%)',
+                  border: '1px solid rgba(245,158,11,0.2)',
+                  borderRadius: '16px',
+                  boxShadow: '0 4px 6px -1px rgba(0,0,0,0.05)'
+                }}
+              >
+                <div className="flex items-start justify-between">
+                  <div className="flex-1">
+                    <div className="flex items-center gap-2 mb-2">
+                      <div className="w-2 h-2 rounded-full bg-amber-500"></div>
+                      <h4 style={{ 
+                        color: '#d97706', 
+                        fontWeight: 600, 
+                        fontSize: '1rem', 
+                        margin: 0
+                      }}>
+                        Setup Required
+                      </h4>
+                    </div>
+                    <p style={{ 
+                      color: '#92400e', 
+                      fontSize: '0.875rem', 
+                      lineHeight: 1.5,
+                      margin: 0 
+                    }}>
+                      The transcription API is not configured. Please follow the setup instructions below to get started.
+                    </p>
+                  </div>
                   <button
-                    onClick={() => setError('')}
-                    className="px-3 py-1 text-xs bg-red-100 hover:bg-red-200 text-red-700 rounded transition-colors"
+                    onClick={checkApiAvailability}
+                    className="px-4 py-2 hover:opacity-80 transition-all duration-200 transform hover:scale-105"
+                    style={{
+                      fontSize: '0.875rem',
+                      backgroundColor: 'rgba(245,158,11,0.1)',
+                      color: '#d97706',
+                      borderRadius: '8px',
+                      border: '1px solid rgba(245,158,11,0.2)',
+                      fontWeight: 500
+                    }}
                   >
-                    Dismiss
+                    Recheck
                   </button>
                 </div>
               </div>
-            </div>
-          )}
+            )}
 
-          {apiStatus === 'unavailable' && !isLoading && (
-            <div className="mb-6 p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
-              <div className="flex items-start justify-between">
-                <div className="flex-1">
-                  <h4 className="text-yellow-800 font-medium mb-1">Setup Required</h4>
-                  <p className="text-yellow-700 text-sm">
-                    The transcription API is not configured. Please follow the setup instructions below to get started.
+            {/* Audio Player */}
+            {audioUrl && (
+              <div className="mb-8">
+                <div 
+                  className="p-6 backdrop-blur-sm"
+                  style={{
+                    background: 'linear-gradient(135deg, rgba(100,116,139,0.05) 0%, rgba(148,163,184,0.05) 100%)',
+                    borderRadius: '16px',
+                    border: '1px solid rgba(100,116,139,0.1)',
+                    boxShadow: '0 4px 6px -1px rgba(0,0,0,0.05)'
+                  }}
+                >
+                  <div className="flex items-center gap-3 mb-4">
+                    <Volume2 className="w-5 h-5 text-slate-600" />
+                    <h3 style={{ 
+                      fontWeight: 600, 
+                      color: '#334155', 
+                      fontSize: '1rem',
+                      margin: 0 
+                    }}>
+                      Audio Recording
+                    </h3>
+                  </div>
+                  <audio
+                    ref={audioRef}
+                    src={audioUrl}
+                    onEnded={() => setIsPlaying(false)}
+                    className="w-full"
+                    controls
+                    style={{
+                      borderRadius: '12px',
+                      outline: 'none'
+                    }}
+                  />
+                </div>
+              </div>
+            )}
+
+            {/* Transcript Output */}
+            {transcript && (
+              <div 
+                className="p-6 backdrop-blur-sm"
+                style={{
+                  background: 'linear-gradient(135deg, rgba(16,185,129,0.05) 0%, rgba(110,231,183,0.05) 100%)',
+                  border: '1px solid rgba(16,185,129,0.1)',
+                  borderRadius: '16px',
+                  boxShadow: '0 4px 6px -1px rgba(0,0,0,0.05)'
+                }}
+              >
+                <div className="flex items-center gap-3 mb-4">
+                  <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse"></div>
+                  <h3 style={{ 
+                    fontWeight: 600, 
+                    color: '#047857', 
+                    fontSize: '1.125rem',
+                    margin: 0 
+                  }}>
+                    Transcript
+                  </h3>
+                  <div 
+                    className="ml-auto px-3 py-1 text-xs font-medium rounded-full"
+                    style={{
+                      backgroundColor: 'rgba(16,185,129,0.1)',
+                      color: '#047857',
+                      border: '1px solid rgba(16,185,129,0.2)'
+                    }}
+                  >
+                    {transcript.length} characters
+                  </div>
+                </div>
+                <div 
+                  className="p-4"
+                  style={{
+                    backgroundColor: 'rgba(255,255,255,0.7)',
+                    borderRadius: '12px',
+                    border: '1px solid rgba(16,185,129,0.1)'
+                  }}
+                >
+                  <p style={{ 
+                    color: '#1f2937', 
+                    lineHeight: 1.7, 
+                    whiteSpace: 'pre-wrap',
+                    fontSize: '1.125rem',
+                    margin: 0,
+                    fontWeight: 400
+                  }}>
+                    {transcript}
                   </p>
                 </div>
-                <button
-                  onClick={checkApiAvailability}
-                  className="px-3 py-1 text-xs bg-yellow-100 hover:bg-yellow-200 text-yellow-700 rounded transition-colors"
-                >
-                  Recheck
-                </button>
               </div>
-            </div>
-          )}
+            )}
+          </div>
+        </div>
 
-          {/* Audio Player */}
-          {audioUrl && (
-            <div className="mb-6">
-              <audio
-                ref={audioRef}
-                src={audioUrl}
-                onEnded={() => setIsPlaying(false)}
-                className="w-full"
-                controls
-              />
-            </div>
-          )}
-
-          {/* Transcript Output */}
-          {transcript && (
-            <div className="border border-gray-200 rounded-lg p-4 bg-gray-50">
-              <h3 className="font-semibold text-gray-900 mb-2">Transcript:</h3>
-              <p className="text-gray-700 leading-relaxed whitespace-pre-wrap">
-                {transcript}
-              </p>
-            </div>
-          )}
+        {/* Footer */}
+        <div className="text-center mt-8">
+          <p style={{
+            color: 'rgba(255,255,255,0.7)',
+            fontSize: '0.875rem',
+            margin: 0
+          }}>
+            
+          </p>
         </div>
       </div>
     </div>
