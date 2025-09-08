@@ -23,33 +23,40 @@ const VoiceTranscriptionPage: React.FC<VoiceTranscriptionPageProps> = ({ onBack 
   const chunksRef = useRef<Blob[]>([]);
   const intervalRef = useRef<NodeJS.Timeout | null>(null);
 
+  // First thing we do on load is check if our API is working
   useEffect(() => {
     checkApiAvailability();
     
+    // Cleanup function - always good to avoid memory leaks!
     return () => {
       if (audioUrl) {
-        URL.revokeObjectURL(audioUrl);
+        URL.revokeObjectURL(audioUrl); // Free up memory from any audio blobs
       }
       if (intervalRef.current) {
-        clearInterval(intervalRef.current);
+        clearInterval(intervalRef.current); // Stop any running timers
       }
     };
   }, [audioUrl]);
 
+  // This handles the recording timer - wanted to show users how long they've been recording
   useEffect(() => {
     if (isRecording) {
+      // Update the timer every second while recording
       intervalRef.current = setInterval(() => {
         setRecordingDuration(prev => prev + 1);
       }, 1000);
     } else {
+      // Clean up when we stop recording
       if (intervalRef.current) {
         clearInterval(intervalRef.current);
       }
+      // Reset the timer if we don't have any audio yet
       if (!audioUrl) {
         setRecordingDuration(0);
       }
     }
 
+    // More cleanup - React has made me paranoid about memory leaks!
     return () => {
       if (intervalRef.current) {
         clearInterval(intervalRef.current);
@@ -57,17 +64,20 @@ const VoiceTranscriptionPage: React.FC<VoiceTranscriptionPageProps> = ({ onBack 
     };
   }, [isRecording, audioUrl]);
 
+  // Simple helper to format seconds into MM:SS - makes the UI nicer
   const formatDuration = (seconds: number) => {
     const mins = Math.floor(seconds / 60);
     const secs = seconds % 60;
-    return `${mins}:${secs.toString().padStart(2, '0')}`;
+    return `${mins}:${secs.toString().padStart(2, '0')}`; // Pad with leading zero for single digits
   };
 
+  // This checks if our transcription API is working - had some issues with this during development
   const checkApiAvailability = async () => {
     setApiStatus('checking');
-    setDebugInfo('🔍 Checking API availability...');
+    setDebugInfo('🔍 Checking API availability...'); // I like using emojis in debug messages
     
     try {
+      // Send an empty request to see if the API responds correctly
       const response = await fetch('/api/transcribe', {
         method: 'POST',
         headers: {
@@ -78,24 +88,29 @@ const VoiceTranscriptionPage: React.FC<VoiceTranscriptionPageProps> = ({ onBack 
       
       setDebugInfo(`📡 API Response: ${response.status} ${response.statusText}`);
       
+      // A 400 is actually good here - means the API exists but rejected our empty request
       if (response.status === 400) {
         setApiStatus('available');
         setError('');
         setDebugInfo('✅ API endpoint available and configured correctly');
       } else if (response.status === 404) {
+        // This means the API route doesn't exist at all
         setApiStatus('unavailable');
         setError('API endpoint not found. Missing /api/transcribe route.');
         setDebugInfo('❌ API endpoint not found at /api/transcribe');
       } else if (response.status === 500) {
+        // Server error - probably a configuration issue
         const data = await response.json();
         setApiStatus('unavailable');
         setError(data.error || 'Server configuration error. Check your API key.');
         setDebugInfo(`🔧 Server error: ${JSON.stringify(data)}`);
       } else {
+        // Any other response we'll assume is okay
         setApiStatus('available');
         setDebugInfo(`✅ API available (status: ${response.status})`);
       }
     } catch (err: any) {
+      // Network errors usually mean the server isn't running
       console.error('API check failed:', err);
       setApiStatus('unavailable');
       setError('Unable to connect to the transcription service.');
@@ -103,7 +118,9 @@ const VoiceTranscriptionPage: React.FC<VoiceTranscriptionPageProps> = ({ onBack 
     }
   };
 
+  // The main recording function - this was tricky to get right across different browsers
   const startRecording = async () => {
+    // First check if our API is available - no point recording if we can't transcribe
     if (apiStatus === 'unavailable') {
       setError('Transcription service is not available.');
       setDebugInfo(`🚫 Recording blocked - API status: ${apiStatus}`);
@@ -114,26 +131,29 @@ const VoiceTranscriptionPage: React.FC<VoiceTranscriptionPageProps> = ({ onBack 
       setError('');
       setDebugInfo('🎤 Requesting microphone access...');
       
+      // Request microphone access with some quality settings
       const stream = await navigator.mediaDevices.getUserMedia({ 
         audio: {
-          echoCancellation: true,
-          noiseSuppression: true,
-          sampleRate: 16000
+          echoCancellation: true, // Helps with background noise
+          noiseSuppression: true, // Makes voice clearer
+          sampleRate: 16000 // Good balance of quality vs file size
         } 
       });
       
       setDebugInfo('🔍 Checking supported audio formats...');
       
+      // Different browsers support different formats - need to check what works
       const mimeTypes = [
-        'audio/webm;codecs=opus',
+        'audio/webm;codecs=opus', // Best quality option
         'audio/webm',
         'audio/mp4',
-        'audio/wav'
+        'audio/wav' // Fallback option
       ];
       
       let selectedMimeType = '';
       const supportedFormats: string[] = [];
       
+      // Find the first supported format
       for (const mimeType of mimeTypes) {
         if (MediaRecorder.isTypeSupported(mimeType)) {
           supportedFormats.push(mimeType);
@@ -145,10 +165,12 @@ const VoiceTranscriptionPage: React.FC<VoiceTranscriptionPageProps> = ({ onBack 
       
       setDebugInfo(`🎵 Supported formats: ${supportedFormats.join(', ')} | Using: ${selectedMimeType}`);
       
+      // If no formats are supported, we can't record
       if (!selectedMimeType) {
         throw new Error('No supported audio format found in your browser');
       }
       
+      // Create the recorder with our chosen format
       const mediaRecorder = new MediaRecorder(stream, {
         mimeType: selectedMimeType
       });
@@ -156,6 +178,7 @@ const VoiceTranscriptionPage: React.FC<VoiceTranscriptionPageProps> = ({ onBack 
       mediaRecorderRef.current = mediaRecorder;
       chunksRef.current = [];
       
+      // This fires periodically during recording to give us audio chunks
       mediaRecorder.ondataavailable = (event) => {
         if (event.data.size > 0) {
           chunksRef.current.push(event.data);
@@ -163,14 +186,17 @@ const VoiceTranscriptionPage: React.FC<VoiceTranscriptionPageProps> = ({ onBack 
         }
       };
       
+      // This fires when recording stops
       mediaRecorder.onstop = async () => {
         try {
+          // Combine all our audio chunks into one blob
           const audioBlob = new Blob(chunksRef.current, { type: selectedMimeType });
           const url = URL.createObjectURL(audioBlob);
           setAudioUrl(url);
           
           setDebugInfo(`🎵 Recording complete: ${audioBlob.size} bytes, type: ${audioBlob.type}`);
           
+          // Send it off for transcription
           await transcribeAudio(audioBlob);
         } catch (error: any) {
           console.error('Error processing recording:', error);
@@ -178,9 +204,11 @@ const VoiceTranscriptionPage: React.FC<VoiceTranscriptionPageProps> = ({ onBack 
           setDebugInfo(`❌ Recording processing error: ${error.message}`);
         }
         
+        // Always clean up the media stream
         stream.getTracks().forEach(track => track.stop());
       };
       
+      // Handle any recording errors
       mediaRecorder.onerror = (event: any) => {
         console.error('MediaRecorder error:', event);
         setError('Recording failed. Check your microphone permissions.');
@@ -188,6 +216,7 @@ const VoiceTranscriptionPage: React.FC<VoiceTranscriptionPageProps> = ({ onBack 
         setIsRecording(false);
       };
       
+      // Start recording!
       mediaRecorder.start();
       setIsRecording(true);
       setRetryCount(0);
@@ -195,6 +224,7 @@ const VoiceTranscriptionPage: React.FC<VoiceTranscriptionPageProps> = ({ onBack 
       setDebugInfo('🔴 Recording started successfully');
       
     } catch (err: any) {
+      // Usually this means the user denied microphone permission
       console.error('Error starting recording:', err);
       setDebugInfo(`❌ Recording start error: ${err.name} - ${err.message}`);
       

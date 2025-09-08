@@ -13,137 +13,146 @@ import ReactFlow, {
 } from 'reactflow';
 import 'reactflow/dist/style.css';
 
-// Types
+// My type definitions - spent a while getting these right to make the mindmap work smoothly
 interface CustomNodeData {
   label: string;
-  isEditing?: boolean;
-  color?: string;
+  isEditing?: boolean; // Tracks if user is currently editing this node
+  color?: string; // For color-coding different nodes
 }
 
 interface EdgeConfig {
   id: string;
   label: string;
-  type: string;
+  type: string; // Different line styles between nodes
 }
 
 interface MarkerConfig {
   id: string;
   label: string;
-  markerEnd?: { type: string; color?: string };
-  markerStart?: { type: string; color?: string };
+  markerEnd?: { type: string; color?: string }; // Arrow at end of connection
+  markerStart?: { type: string; color?: string }; // Arrow at start of connection
 }
 
 interface CustomNode {
   id: string;
   type: string;
-  position: { x: number; y: number };
+  position: { x: number; y: number }; // Where to render on the canvas
   data: CustomNodeData;
-  style?: any;
+  style?: any; // For custom styling
 }
 
 interface CustomEdge {
   id: string;
-  source: string;
-  target: string;
-  sourceHandle?: string;
-  targetHandle?: string;
-  type?: string;
+  source: string; // ID of starting node
+  target: string; // ID of ending node
+  sourceHandle?: string; // Which handle on the source node
+  targetHandle?: string; // Which handle on the target node
+  type?: string; // Line style
   style?: any;
-  animated?: boolean;
-  markerEnd?: any;
-  markerStart?: any;
+  animated?: boolean; // For fancy animated connections
+  markerEnd?: any; // Arrow at end
+  markerStart?: any; // Arrow at start
 }
 
 interface MindMapPageProps {
-  onBack?: () => void;
+  onBack?: () => void; // For navigation back to main page
 }
 
-// Clean Design System Colors
+// I picked these colors carefully - they're vibrant but not too harsh on the eyes
 const COLORS: string[] = [
   '#6366F1', '#10B981', '#F59E0B', '#EF4444', '#3B82F6', '#8B5CF6', '#06B6D4', '#84CC16', '#F97316', '#EC4899'
 ];
 
+// Different connection styles between nodes - the curved ones look nicest to me
 const EDGE_TYPES: EdgeConfig[] = [
   { id: 'smoothstep', label: 'Curved', type: 'smoothstep' },
   { id: 'straight', label: 'Straight', type: 'straight' },
   { id: 'step', label: 'Step', type: 'step' },
 ];
 
+// Arrow options for the connections - helps show relationships between ideas
 const MARKER_TYPES: MarkerConfig[] = [
   { id: 'none', label: 'None' },
   { id: 'arrow', label: 'Arrow', markerEnd: { type: 'arrowclosed' } },
   { id: 'both', label: 'Both', markerEnd: { type: 'arrowclosed' }, markerStart: { type: 'arrowclosed' } },
 ];
 
-// Clean Custom Node Component
+// My custom node component - this is where most of the UI magic happens
 interface NodeComponentProps {
   data: CustomNodeData;
   id: string;
-  selected: boolean;
+  selected: boolean; // Needed to show different styling when selected
 }
 
 const CustomNodeComponent: React.FC<NodeComponentProps> = ({ data, id, selected }) => {
+  // Track editing state and node text
   const [isEditing, setIsEditing] = useState<boolean>(false);
   const [label, setLabel] = useState<string>(data.label);
-  const inputRef = useRef<HTMLInputElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null); // Need this to focus the input when editing starts
 
+  // Double-click to edit - simple but effective UX
   const handleDoubleClick = useCallback((): void => {
     setIsEditing(true);
-    setTimeout(() => inputRef.current?.focus(), 0);
+    setTimeout(() => inputRef.current?.focus(), 0); // Small delay ensures the input is ready to focus
   }, []);
 
+  // Save changes when user is done editing
   const handleSubmit = useCallback((): void => {
-    const newLabel: string = label.trim() || 'Untitled';
+    const newLabel: string = label.trim() || 'Untitled'; // Fallback to prevent empty nodes
     setIsEditing(false);
     setLabel(newLabel);
     
+    // Let the parent component know about the change - custom events are so useful here!
     window.dispatchEvent(new CustomEvent('updateNode', {
       detail: { id, label: newLabel }
     }));
   }, [id, label]);
 
+  // Handle keyboard shortcuts while editing
   const handleKeyDown = useCallback((e: React.KeyboardEvent<HTMLInputElement>): void => {
     if (e.key === 'Enter') {
-      handleSubmit();
+      handleSubmit(); // Save on Enter
     } else if (e.key === 'Escape') {
       setIsEditing(false);
-      setLabel(data.label);
+      setLabel(data.label); // Revert changes on Escape - saved me from many accidental edits!
     }
   }, [data.label, handleSubmit]);
 
+  // Style for the connection points - I keep them invisible until hover for a cleaner look
   const handleStyle = useMemo((): React.CSSProperties => ({
     background: '#FFFFFF',
     border: `2px solid ${data.color || '#6366F1'}`,
     width: '8px',
     height: '8px',
     borderRadius: '50%',
-    opacity: 0,
+    opacity: 0, // Hidden by default - they appear on hover via CSS
     transition: 'all 0.2s ease',
     zIndex: 10,
   }), [data.color]);
 
+  // Main node styling - spent hours tweaking these values to get the perfect look
   const nodeStyle = useMemo((): React.CSSProperties => ({
     position: 'relative' as const,
     padding: '12px 16px',
     borderRadius: '8px',
     border: 'none',
     background: selected 
-      ? `linear-gradient(135deg, ${data.color || '#6366F1'}15, ${data.color || '#6366F1'}08)` 
+      ? `linear-gradient(135deg, ${data.color || '#6366F1'}15, ${data.color || '#6366F1'}08)` // Subtle gradient when selected
       : '#FFFFFF',
     color: '#1F2937',
     fontSize: '14px',
     fontWeight: '500',
-    fontFamily: 'Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
+    fontFamily: 'Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif', // My favorite font stack
     lineHeight: '1.4',
     boxShadow: selected 
-      ? `0 4px 20px ${data.color || '#6366F1'}30, 0 0 0 1px ${data.color || '#6366F1'}40`
+      ? `0 4px 20px ${data.color || '#6366F1'}30, 0 0 0 1px ${data.color || '#6366F1'}40` // Deeper shadow when selected
       : '0 2px 8px rgba(0,0,0,0.04), 0 0 0 1px rgba(0,0,0,0.06)',
     cursor: isEditing ? 'text' : 'pointer',
     minWidth: '100px',
-    maxWidth: '200px',
+    maxWidth: '200px', // Prevents nodes from getting too wide
     textAlign: 'center' as const,
-    transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
-    transform: selected ? 'translateY(-1px)' : 'translateY(0)',
+    transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)', // Smooth animation for all changes
+    transform: selected ? 'translateY(-1px)' : 'translateY(0)', // Subtle lift effect when selected
   }), [selected, isEditing, data.color]);
 
   return (
@@ -208,7 +217,7 @@ const CustomNodeComponent: React.FC<NodeComponentProps> = ({ data, id, selected 
         isValidConnection={(connection: { source: string; target: string; }) => connection.source !== connection.target}
       />
 
-      {/* Clean color accent */}
+      {/* Little color accent at the top - adds a nice touch of personality to each node */}
       <div style={{
         position: 'absolute',
         top: '-2px',
@@ -248,39 +257,41 @@ const CustomNodeComponent: React.FC<NodeComponentProps> = ({ data, id, selected 
   );
 };
 
-// Main Component
+// The main mindmap component - this is where everything comes together
 const MindMapPage: React.FC<MindMapPageProps> = ({ onBack }) => {
+  // Set up initial nodes - I like having a starter template so users aren't facing a blank canvas
   const [nodes, setNodes, onNodesChange] = useNodesState([
     {
       id: '1',
       type: 'custom',
-      position: { x: 400, y: 200 },
+      position: { x: 400, y: 200 }, // Center position for the main idea
       data: { label: 'Central Idea', color: '#6366F1' },
-      style: { zIndex: 1000 },
+      style: { zIndex: 1000 }, // Keep main idea on top
     },
     {
       id: '2',
       type: 'custom',
-      position: { x: 200, y: 350 },
+      position: { x: 200, y: 350 }, // Left supporting idea
       data: { label: 'Supporting Concept', color: '#10B981' },
       style: { zIndex: 1000 },
     },
     {
       id: '3',
       type: 'custom',
-      position: { x: 600, y: 350 },
+      position: { x: 600, y: 350 }, // Right supporting idea
       data: { label: 'Another Idea', color: '#F59E0B' },
       style: { zIndex: 1000 },
     },
   ]);
+  // Initial connections between nodes - I match the edge colors to the target nodes for visual consistency
   const [edges, setEdges, onEdgesChange] = useEdgesState([
     {
       id: 'e1-2',
       source: '1',
       target: '2',
-      type: 'smoothstep',
+      type: 'smoothstep', // Curved connections look more organic
       style: { stroke: '#10B981', strokeWidth: 2 },
-      markerEnd: { type: 'arrowclosed', color: '#10B981' },
+      markerEnd: { type: 'arrowclosed', color: '#10B981' }, // Arrow showing relationship direction
     },
     {
       id: 'e1-3',
@@ -291,189 +302,200 @@ const MindMapPage: React.FC<MindMapPageProps> = ({ onBack }) => {
       markerEnd: { type: 'arrowclosed', color: '#F59E0B' },
     },
   ]);
-  const [nodeId, setNodeId] = useState<number>(4);
-  const [selectedEdgeType, setSelectedEdgeType] = useState<string>('smoothstep');
-  const [selectedMarkerType, setSelectedMarkerType] = useState<string>('arrow');
-  const [selectedNodes, setSelectedNodes] = useState<string[]>([]);
-  const [sidebarVisible, setSidebarVisible] = useState<boolean>(false);
-  const [showMiniMap, setShowMiniMap] = useState<boolean>(true);
-  const [searchTerm, setSearchTerm] = useState<string>('');
-  const [undoStack, setUndoStack] = useState<any[]>([]);
+  // Track various states for the mindmap functionality
+  const [nodeId, setNodeId] = useState<number>(4); // Counter for generating unique IDs for new nodes
+  const [selectedEdgeType, setSelectedEdgeType] = useState<string>('smoothstep'); // Default to curved connections
+  const [selectedMarkerType, setSelectedMarkerType] = useState<string>('arrow'); // Default to arrows
+  const [selectedNodes, setSelectedNodes] = useState<string[]>([]); // Currently selected nodes
+  const [sidebarVisible, setSidebarVisible] = useState<boolean>(false); // Toggle for settings panel
+  const [showMiniMap, setShowMiniMap] = useState<boolean>(true); // I find the minimap super helpful for navigation
+  const [searchTerm, setSearchTerm] = useState<string>(''); // For finding nodes by text
+  const [undoStack, setUndoStack] = useState<any[]>([]); // For my undo/redo functionality
   const [redoStack, setRedoStack] = useState<any[]>([]);
-  const [isMobile, setIsMobile] = useState<boolean>(false);
+  const [isMobile, setIsMobile] = useState<boolean>(false); // For responsive adjustments
   const [savedMindMaps, setSavedMindMaps] = useState<Array<{
     id: string;
     name: string;
     data: { nodes: CustomNode[]; edges: CustomEdge[] };
     timestamp: number;
-  }>>([]);
-  const [currentMindMapName, setCurrentMindMapName] = useState<string>('Untitled Mind Map');
-  const fileInputRef = useRef<HTMLInputElement>(null);
+  }>>([]); // Store saved mindmaps in localStorage
+  const [currentMindMapName, setCurrentMindMapName] = useState<string>('Untitled Mind Map'); // Default name
+  const fileInputRef = useRef<HTMLInputElement>(null); // For file import/export
 
+  // Register my custom node component with ReactFlow
   const nodeTypes = useMemo(() => ({ custom: CustomNodeComponent }), []);
 
-  // Load saved mind maps on component mount
+  // Load any previously saved mind maps from localStorage when the component mounts
   useEffect(() => {
     try {
       const saved = JSON.parse(localStorage.getItem('savedMindMaps') || '[]');
       setSavedMindMaps(saved);
     } catch (error) {
-      console.error('Error loading saved mind maps:', error);
-      setSavedMindMaps([]);
+      console.error('Error loading saved mind maps:', error); // This happened once when I had malformed JSON
+      setSavedMindMaps([]); // Start fresh if there's an error
     }
   }, []);
 
-  // Enhanced responsive detection
+  // Check if we're on mobile to adjust the UI accordingly
   useEffect(() => {
     const checkMobile = () => {
-      setIsMobile(window.innerWidth < 768);
+      setIsMobile(window.innerWidth < 768); // My breakpoint for mobile view
     };
     
     checkMobile();
     window.addEventListener('resize', checkMobile);
-    return () => window.removeEventListener('resize', checkMobile);
+    return () => window.removeEventListener('resize', checkMobile); // Cleanup to prevent memory leaks
   }, []);
 
-  // Enhanced keyboard shortcuts
+  // Keyboard shortcuts - I'm a big fan of these for power users (and myself!)
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      // Don't trigger shortcuts when typing in inputs
+      // Don't trigger shortcuts when typing in inputs - learned this the hard way!
       if ((e.target as HTMLElement)?.tagName === 'INPUT') return;
 
-      if (e.ctrlKey || e.metaKey) {
+      if (e.ctrlKey || e.metaKey) { // Support both Windows/Linux and Mac
         switch (e.key) {
           case 'z':
             if (e.shiftKey) {
               e.preventDefault();
-              redo();
+              redo(); // Ctrl+Shift+Z for redo
             } else {
               e.preventDefault();
-              undo();
+              undo(); // Ctrl+Z for undo
             }
             break;
           case 'a':
             e.preventDefault();
-            selectAll();
+            selectAll(); // Ctrl+A to select all nodes
             break;
           case 'n':
             e.preventDefault();
-            addNode();
+            addNode(); // Ctrl+N to add a new node
             break;
           case 'f':
             e.preventDefault();
-            document.getElementById('search-input')?.focus();
+            document.getElementById('search-input')?.focus(); // Ctrl+F to search
             break;
           case 'd':
             e.preventDefault();
-            duplicateSelected();
+            duplicateSelected(); // Ctrl+D to duplicate - super useful for similar nodes
             break;
           case 's':
             e.preventDefault();
-            saveMindMap();
+            saveMindMap(); // Ctrl+S to save - muscle memory from other apps
             break;
         }
       }
       if (e.key === 'Delete' || e.key === 'Backspace') {
         if (selectedNodes.length > 0) {
-          deleteSelectedNodes();
+          deleteSelectedNodes(); // Delete selected nodes with Delete/Backspace
         }
       }
     };
 
     window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown); // Clean up event listener
   }, [selectedNodes]);
 
+  // Save the current state to the undo stack before making changes
   const saveState = useCallback(() => {
-    setUndoStack(prev => [...prev.slice(-19), { nodes, edges }]);
-    setRedoStack([]);
+    setUndoStack(prev => [...prev.slice(-19), { nodes, edges }]); // Limit to 20 undo steps to prevent memory issues
+    setRedoStack([]); // Clear redo stack when a new action is performed
   }, [nodes, edges]);
 
+  // Undo the last action - took me a while to get this right with the stacks
   const undo = useCallback(() => {
     if (undoStack.length > 0) {
-      const lastState = undoStack[undoStack.length - 1];
-      setRedoStack(prev => [...prev, { nodes, edges }]);
-      setNodes(lastState.nodes);
-      setEdges(lastState.edges);
-      setUndoStack(prev => prev.slice(0, -1));
+      const lastState = undoStack[undoStack.length - 1]; // Get the last saved state
+      setRedoStack(prev => [...prev, { nodes, edges }]); // Save current state to redo stack
+      setNodes(lastState.nodes); // Restore previous nodes
+      setEdges(lastState.edges); // Restore previous edges
+      setUndoStack(prev => prev.slice(0, -1)); // Remove the used state from undo stack
     }
   }, [undoStack, nodes, edges, setNodes, setEdges]);
 
+  // Redo the last undone action
   const redo = useCallback(() => {
     if (redoStack.length > 0) {
-      const nextState = redoStack[redoStack.length - 1];
-      setUndoStack(prev => [...prev, { nodes, edges }]);
-      setNodes(nextState.nodes);
+      const nextState = redoStack[redoStack.length - 1]; // Get the last redoable state
+      setUndoStack(prev => [...prev, { nodes, edges }]); // Save current state to undo stack
+      setNodes(nextState.nodes); // Apply the redo state
       setEdges(nextState.edges);
-      setRedoStack(prev => prev.slice(0, -1));
+      setRedoStack(prev => prev.slice(0, -1)); // Remove the used state from redo stack
     }
   }, [redoStack, nodes, edges, setNodes, setEdges]);
 
+  // Quick way to select all nodes at once - useful for mass operations
   const selectAll = useCallback(() => {
     setSelectedNodes(nodes.map((node: CustomNode) => node.id));
   }, [nodes]);
 
+  // Duplicate selected nodes - one of my favorite features for quickly building out similar ideas
   const duplicateSelected = useCallback(() => {
     if (selectedNodes.length === 0) return;
     
-    saveState();
+    saveState(); // Save current state for undo
     const selectedNodesData = nodes.filter((node: CustomNode) => selectedNodes.includes(node.id));
     const newNodes = selectedNodesData.map((node: CustomNode, index: number) => ({
       ...node,
-      id: (nodeId + index).toString(),
+      id: (nodeId + index).toString(), // Generate new unique IDs
       position: {
-        x: node.position.x + 50,
+        x: node.position.x + 50, // Offset a bit so they don't stack exactly on top
         y: node.position.y + 50,
       },
       data: {
         ...node.data,
-        label: `${node.data.label} (Copy)`,
+        label: `${node.data.label} (Copy)`, // Mark as copy to distinguish from original
       },
     }));
     
     setNodes((nds: CustomNode[]) => [...nds, ...newNodes]);
-    setNodeId((prev: number) => prev + selectedNodesData.length);
-    setSelectedNodes(newNodes.map((node: CustomNode) => node.id));
+    setNodeId((prev: number) => prev + selectedNodesData.length); // Update counter for next new node
+    setSelectedNodes(newNodes.map((node: CustomNode) => node.id)); // Select the new nodes
   }, [selectedNodes, nodes, nodeId, setNodes, saveState]);
 
-  // Save/Load Functions
+  // Save/Load Functions - I added these so I wouldn't lose my work between sessions
   const saveMindMap = useCallback(() => {
     const name = prompt('Enter a name for this mind map:', currentMindMapName) || currentMindMapName;
     if (!name) return;
     
     const mindMapData = {
-      id: Date.now().toString(),
+      id: Date.now().toString(), // Unique ID based on timestamp
       name,
       data: { nodes, edges },
-      timestamp: Date.now()
+      timestamp: Date.now() // For sorting by most recent
     };
     
+    // Replace existing map with same name or add new one
     const updatedSaved = [...savedMindMaps.filter(m => m.name !== name), mindMapData];
     setSavedMindMaps(updatedSaved);
     setCurrentMindMapName(name);
     
     try {
-      localStorage.setItem('savedMindMaps', JSON.stringify(updatedSaved));
-      alert(`Mind map "${name}" saved successfully!`);
+      localStorage.setItem('savedMindMaps', JSON.stringify(updatedSaved)); // Store in browser storage
+      alert(`Mind map "${name}" saved successfully!`); // Simple feedback is better than none
     } catch (error) {
-      alert('Error saving mind map. Please try again.');
+      alert('Error saving mind map. Please try again.'); // Probably hit storage limits
     }
   }, [nodes, edges, currentMindMapName, savedMindMaps]);
 
+  // Load a previously saved mind map - with confirmation to prevent accidental data loss
   const loadMindMap = useCallback((mindMapData: { nodes: CustomNode[]; edges: CustomEdge[]; name?: string }) => {
     if (window.confirm('Loading a new mind map will replace the current one. Continue?')) {
-      saveState();
+      saveState(); // Save current state for undo
       setNodes(mindMapData.nodes || []);
       setEdges(mindMapData.edges || []);
       setCurrentMindMapName(mindMapData.name || 'Loaded Mind Map');
-      setSelectedNodes([]);
+      setSelectedNodes([]); // Clear selection
       
-      // Update nodeId to avoid conflicts
+      // Update nodeId to avoid conflicts when adding new nodes
+      // Took me a while to figure out this bug - new nodes were overwriting existing ones!
       const maxId = Math.max(0, ...(mindMapData.nodes || []).map((n: CustomNode) => parseInt(n.id) || 0));
       setNodeId(maxId + 1);
     }
   }, [setNodes, setEdges, saveState]);
 
+  // Delete a saved mind map - with confirmation to prevent accidents
   const deleteSavedMindMap = useCallback((id: string) => {
     if (window.confirm('Are you sure you want to delete this mind map?')) {
       const updatedSaved = savedMindMaps.filter(m => m.id !== id);
@@ -481,20 +503,22 @@ const MindMapPage: React.FC<MindMapPageProps> = ({ onBack }) => {
       try {
         localStorage.setItem('savedMindMaps', JSON.stringify(updatedSaved));
       } catch (error) {
-        alert('Error deleting mind map.');
+        alert('Error deleting mind map.'); // Shouldn't happen but just in case
       }
     }
   }, [savedMindMaps]);
 
+  // Start fresh with a new mind map - I use this when starting a completely new project
   const createNewMindMap = useCallback(() => {
     if (nodes.length > 0 && window.confirm('Creating a new mind map will clear the current one. Continue?')) {
-      saveState();
+      saveState(); // Save current state for undo
       setNodes([]);
       setEdges([]);
       setCurrentMindMapName('New Mind Map');
       setSelectedNodes([]);
-      setNodeId(1);
+      setNodeId(1); // Reset node counter
     } else if (nodes.length === 0) {
+      // If already empty, just update the name
       setCurrentMindMapName('New Mind Map');
     }
   }, [nodes.length, setNodes, setEdges, saveState]);

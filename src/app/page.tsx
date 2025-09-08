@@ -7,31 +7,31 @@ import { auth } from './firebase/config'; // Adjust path as needed
 import AuthPage from './sign-up/page';
 import LinearPage from './linear/components/linearpage';
 
-// Type definitions for database connection
+// My type definitions for database connection
 interface DatabaseConnectionResult {
-  connected: boolean;
-  details?: any;
-  error?: string;
-  latency?: number;
+  connected: boolean; // Whether we successfully connected
+  details?: any; // Any extra info returned
+  error?: string; // What went wrong if anything
+  latency?: number; // How long the connection took
 }
 
 interface DatabaseDetails {
-  database?: string;
-  latency?: number;
-  server?: string;
-  [key: string]: any;
+  database?: string; // Which database we're using
+  latency?: number; // Response time
+  server?: string; // Server info
+  [key: string]: any; // Any other properties
 }
 
-// Updated User interface (simplified)
+// My simplified User interface - just what we need
 interface User {
-  id: string;
-  email: string;
-  name: string;
+  id: string; // Unique identifier
+  email: string; // User's email address
+  name: string; // User's display name
 }
 
-// Real database connection utility (no logging)
+// I wrote this function to make sure our database is always working
 const checkDatabaseConnection = async (): Promise<DatabaseConnectionResult> => {
-  const startTime = performance.now();
+  const startTime = performance.now(); // I like to track how long things take
   
   try {
     const response = await fetch('/api/health-check', {
@@ -39,11 +39,11 @@ const checkDatabaseConnection = async (): Promise<DatabaseConnectionResult> => {
       headers: {
         'Content-Type': 'application/json',
       },
-      signal: AbortSignal.timeout(10000) // 10 second timeout
+      signal: AbortSignal.timeout(10000) // I don't want to wait forever if something's wrong
     });
 
     const endTime = performance.now();
-    const latency = Math.round(endTime - startTime);
+    const latency = Math.round(endTime - startTime); // I track this because fast apps make happy users
 
     if (response.ok) {
       const data: DatabaseDetails = await response.json();
@@ -84,14 +84,16 @@ const AnimatedParticles: React.FC = () => {
   const [particles, setParticles] = useState<Particle[]>([]);
 
   useEffect(() => {
+    // I'm creating 16 floating particles with random positions and animations
+    // This gives a nice subtle background effect without being distracting
     setParticles([...Array(16)].map((_, i) => ({
       id: i,
-      className: `animate-float-${(i % 3) + 1}`,
+      className: `animate-float-${(i % 3) + 1}`, // Using 3 different animation patterns
       style: {
-        left: `${Math.random() * 100}%`,
-        top: `${Math.random() * 100}%`,
-        animationDelay: `${Math.random() * 8}s`,
-        animationDuration: `${6 + Math.random() * 4}s`,
+        left: `${Math.random() * 100}%`, // Random horizontal position
+        top: `${Math.random() * 100}%`, // Random vertical position
+        animationDelay: `${Math.random() * 8}s`, // Staggered start times
+        animationDuration: `${6 + Math.random() * 4}s`, // Varied speeds
       }
     })));
   }, []);
@@ -114,6 +116,7 @@ interface FloatingElementProps {
   gradient?: string;
 }
 
+// I created these floating blobs to make the page feel more alive and dynamic
 const FloatingElement: React.FC<FloatingElementProps> = ({ className = "", gradient = "from-indigo-500/10 to-purple-500/10" }) => {
   return (
     <div className={`absolute rounded-full bg-gradient-to-br ${gradient} blur-3xl animate-pulse-soft ${className}`} />
@@ -127,6 +130,7 @@ interface FeatureCardProps {
   delay?: number;
 }
 
+// I made these feature cards to really pop when you hover over them
 const FeatureCard: React.FC<FeatureCardProps> = ({ icon: Icon, title, description, delay = 0 }) => {
   return (
     <div 
@@ -152,7 +156,7 @@ const FeatureCard: React.FC<FeatureCardProps> = ({ icon: Icon, title, descriptio
   );
 };
 
-// Updated HomePage component with auth logic and no debugging
+// My home page component - the first thing users see when they visit
 const HomePage: React.FC = () => {
   const [currentPage, setCurrentPage] = useState<'home' | 'auth' | 'linear'>('home');
   const [isLoaded, setIsLoaded] = useState<boolean>(false);
@@ -168,12 +172,12 @@ const HomePage: React.FC = () => {
     return () => clearTimeout(timer);
   }, []);
 
-  // Firebase auth state listener
+  // Keep track of whether the user is logged in
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (firebaseUser) => {
       setUser(firebaseUser);
     });
-    return () => unsubscribe();
+    return () => unsubscribe(); // Clean up the listener when component unmounts
   }, []);
 
   // Database connection check on component mount
@@ -221,37 +225,37 @@ const HomePage: React.FC = () => {
     }
   }, [dbStatus.checking, dbStatus.connected]);
 
-  // Get Started handler with auth logic
+  // When someone clicks the big Get Started button
   const handleGetStarted = (): void => {
     if (dbStatus.checking) {
-      return;
+      return; // Don't do anything if we're still connecting to the database
     }
 
     if (!user) {
-      // User not signed in, redirect to auth page
+      // If they're not logged in yet, let's get them signed up
       setCurrentPage('auth');
     } else {
-      // User is signed in, go directly to linear page
+      // If they're already logged in, take them straight to their notes
       setCurrentPage('linear');
     }
   };
 
-  // Handler to go to auth page
+  // This takes users to the sign-in page when they click the button
   const handleGoToAuth = (): void => {
     setCurrentPage('auth');
   };
 
-  // Handler for successful authentication
+  // After they successfully log in, we'll show them the main app
   const handleAuthSuccess = (user: any): void => {
     setCurrentPage('linear');
   };
 
-  // Handler for sign out
+  // When they want to log out, we'll send them back to the home page
   const handleSignOut = (): void => {
     setCurrentPage('home');
   };
 
-  // Handler to go back to home
+  // If they want to go back to the landing page from anywhere
   const handleBackToHome = (): void => {
     setCurrentPage('home');
   };

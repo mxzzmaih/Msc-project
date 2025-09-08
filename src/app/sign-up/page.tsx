@@ -1,4 +1,4 @@
-  'use client';
+'use client';
 
   import React, { JSX, useState, useEffect } from 'react';
   import { Eye, EyeOff, Mail, Lock, User, ArrowRight } from 'lucide-react';
@@ -13,24 +13,27 @@
   } from 'firebase/auth';
   import { auth } from '../firebase/config'; // Adjust path as needed
 
+  // I need these interfaces to keep my form data organized
   interface FormData {
-    name: string;
-    email: string;
-    password: string;
-    confirmPassword: string;
+    name: string; // User's full name
+    email: string; // User's email address
+    password: string; // Their chosen password
+    confirmPassword: string; // Password confirmation to prevent typos
   }
 
+  // This helps me track and display validation errors
   interface FormErrors {
-    name?: string;
-    email?: string;
-    password?: string;
-    confirmPassword?: string;
-    general?: string;
+    name?: string; // Name format issues
+    email?: string; // Email format issues
+    password?: string; // Password strength/format problems
+    confirmPassword?: string; // Password match errors
+    general?: string; // Any other auth errors from Firebase
   }
 
+  // Props for this component - allows parent components to handle auth events
   interface AuthPageProps {
-    onBack?: () => void;
-    onAuthSuccess?: (user: FirebaseUser) => void;
+    onBack?: () => void; // Navigation back function
+    onAuthSuccess?: (user: FirebaseUser) => void; // Callback when auth succeeds
   }
 
   export default function AuthPage({ onBack, onAuthSuccess }: AuthPageProps): JSX.Element {
@@ -69,159 +72,173 @@
       return () => unsubscribe();
     }, [onAuthSuccess]);
 
-    const validateForm = (): boolean => {
-      const newErrors: FormErrors = {};
+    // Make sure the form data is valid before submitting
+  const validateForm = (): boolean => {
+    const newErrors: FormErrors = {};
 
-      if (!formData.email) {
-        newErrors.email = 'Email is required';
-      } else if (!/\S+@\S+\.\S+/.test(formData.email)) {
-        newErrors.email = 'Please enter a valid email address';
+    // Check if the email looks right
+    if (!formData.email) {
+      newErrors.email = 'Email is required'; // Can't leave this empty
+    } else if (!/\S+@\S+\.\S+/.test(formData.email)) {
+      newErrors.email = 'Please enter a valid email address'; // Must be a valid format
+    }
+
+    // Make sure the password is secure enough
+    if (!formData.password) {
+      newErrors.password = 'Password is required'; // Can't leave this empty
+    } else if (formData.password.length < 6) {
+      newErrors.password = 'Password must be at least 6 characters'; // Firebase requirement
+    }
+
+    // For new accounts, we need more info
+    if (!isLogin) {
+      if (!formData.name) {
+        newErrors.name = 'Name is required'; // Need to know who they are
+      } else if (formData.name.length < 2) {
+        newErrors.name = 'Name must be at least 2 characters'; // Too short to be real
       }
 
-      if (!formData.password) {
-        newErrors.password = 'Password is required';
-      } else if (formData.password.length < 6) {
-        newErrors.password = 'Password must be at least 6 characters';
+      // Double-check passwords match to prevent typos
+      if (!formData.confirmPassword) {
+        newErrors.confirmPassword = 'Please confirm your password';
+      } else if (formData.password !== formData.confirmPassword) {
+        newErrors.confirmPassword = 'Passwords do not match'; // Prevent typos
       }
+    }
 
-      if (!isLogin) {
-        if (!formData.name) {
-          newErrors.name = 'Name is required';
-        } else if (formData.name.length < 2) {
-          newErrors.name = 'Name must be at least 2 characters';
-        }
-
-        if (!formData.confirmPassword) {
-          newErrors.confirmPassword = 'Please confirm your password';
-        } else if (formData.password !== formData.confirmPassword) {
-          newErrors.confirmPassword = 'Passwords do not match';
-        }
-      }
-
-      setErrors(newErrors);
-      return Object.keys(newErrors).length === 0;
+    setErrors(newErrors);
+    return Object.keys(newErrors).length === 0; // Return true if no errors
     };
 
-    const getFirebaseErrorMessage = (errorCode: string): string => {
-      switch (errorCode) {
-        case 'auth/user-not-found':
-          return 'No account found with this email address.';
-        case 'auth/wrong-password':
-          return 'Incorrect password. Please try again.';
-        case 'auth/email-already-in-use':
-          return 'An account with this email already exists.';
-        case 'auth/weak-password':
-          return 'Password should be at least 6 characters long.';
-        case 'auth/invalid-email':
-          return 'Please enter a valid email address.';
-        case 'auth/too-many-requests':
-          return 'Too many failed attempts. Please try again later.';
-        case 'auth/network-request-failed':
-          return 'Network error. Please check your connection.';
-        case 'auth/popup-closed-by-user':
-          return 'Sign-in popup was closed before completion.';
-        case 'auth/popup-blocked':
-          return 'Sign-in popup was blocked by your browser.';
-        case 'auth/cancelled-popup-request':
-          return 'Sign-in was cancelled.';
-        case 'auth/account-exists-with-different-credential':
-          return 'An account already exists with the same email but different sign-in credentials.';
-        default:
-          return 'Something went wrong. Please try again.';
+    // Convert Firebase error codes into user-friendly messages
+  const getFirebaseErrorMessage = (errorCode: string): string => {
+    switch (errorCode) {
+      case 'auth/user-not-found':
+        return 'No account found with this email address.'; // User needs to sign up first
+      case 'auth/wrong-password':
+        return 'Incorrect password. Please try again.'; // They typed the wrong password
+      case 'auth/email-already-in-use':
+        return 'An account with this email already exists.'; // User needs to login instead
+      case 'auth/weak-password':
+        return 'Password should be at least 6 characters long.'; // Need a stronger password
+      case 'auth/invalid-email':
+        return 'Please enter a valid email address.'; // Email format is wrong
+      case 'auth/too-many-requests':
+        return 'Too many failed attempts. Please try again later.'; // Rate limiting
+      case 'auth/network-request-failed':
+        return 'Network error. Please check your connection.'; // Internet issues
+      case 'auth/popup-closed-by-user':
+        return 'Sign-in popup was closed before completion.'; // User closed Google popup
+      case 'auth/popup-blocked':
+        return 'Sign-in popup was blocked by your browser.'; // Browser settings issue
+      case 'auth/cancelled-popup-request':
+        return 'Sign-in was cancelled.'; // User cancelled the process
+      case 'auth/account-exists-with-different-credential':
+        return 'An account already exists with the same email but different sign-in credentials.'; // Mixed auth methods
+      default:
+        return 'Something went wrong. Please try again.'; // Fallback for other errors
       }
     };
 
-    const handleEmailPasswordAuth = async (e: React.MouseEvent<HTMLButtonElement>): Promise<void> => {
-      e.preventDefault();
+    // Handle regular email/password login and signup
+  const handleEmailPasswordAuth = async (e: React.MouseEvent<HTMLButtonElement>): Promise<void> => {
+    e.preventDefault();
+    
+    if (!validateForm()) return; // Don't proceed if validation fails
+
+    setIsLoading(true); // Show loading state
+    setErrors({}); // Clear any previous errors
+
+    try {
+      let userCredential;
       
-      if (!validateForm()) return;
-
-      setIsLoading(true);
-      setErrors({});
-
-      try {
-        let userCredential;
+      if (isLogin) {
+        // Log in existing user
+        userCredential = await signInWithEmailAndPassword(auth, formData.email, formData.password);
+        console.log('User signed in:', userCredential.user);
+      } else {
+        // Create a new account
+        userCredential = await createUserWithEmailAndPassword(auth, formData.email, formData.password);
         
-        if (isLogin) {
-          // Sign in existing user
-          userCredential = await signInWithEmailAndPassword(auth, formData.email, formData.password);
-          console.log('User signed in:', userCredential.user);
-        } else {
-          // Create new user
-          userCredential = await createUserWithEmailAndPassword(auth, formData.email, formData.password);
-          
-          // Update the user's display name
-          await updateProfile(userCredential.user, {
-            displayName: formData.name
-          });
-          
-          console.log('User created:', userCredential.user);
-        }
-        
-        // Reset form on success
-        setFormData({
-          name: '',
-          email: '',
-          password: '',
-          confirmPassword: ''
+        // Set their display name for a personalized experience
+        await updateProfile(userCredential.user, {
+          displayName: formData.name
         });
         
-      } catch (error: any) {
-        console.error('Auth error:', error);
-        const errorMessage = getFirebaseErrorMessage(error.code);
-        setErrors({ general: errorMessage });
-      } finally {
-        setIsLoading(false);
+        console.log('User created:', userCredential.user);
       }
-    };
-
-    const handleGoogleSignIn = async (): Promise<void> => {
-      setIsGoogleLoading(true);
-      setErrors({});
-
-      try {
-        const result = await signInWithPopup(auth, googleProvider);
-        console.log('Google sign-in successful:', result.user);
-        
-        // Reset form on success
-        setFormData({
-          name: '',
-          email: '',
-          password: '',
-          confirmPassword: ''
-        });
-        
-      } catch (error: any) {
-        console.error('Google auth error:', error);
-        const errorMessage = getFirebaseErrorMessage(error.code);
-        setErrors({ general: errorMessage });
-      } finally {
-        setIsGoogleLoading(false);
-      }
-    };
-
-    const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>): void => {
-      const { name, value } = e.target;
       
-      // Type-safe way to update form data
-      setFormData(prev => ({ ...prev, [name]: value } as FormData));
-      
-      // Clear specific error when user starts typing - type-safe approach
-      const fieldName = name as keyof FormErrors;
-      if (errors[fieldName]) {
-        setErrors(prev => ({ ...prev, [fieldName]: undefined }));
-      }
-    };
-
-    const toggleMode = (): void => {
-      setIsLogin(!isLogin);
+      // Success! Clear the form
       setFormData({
         name: '',
         email: '',
         password: '',
         confirmPassword: ''
       });
-      setErrors({});
+      
+    } catch (error: any) {
+      // Something went wrong, show the error
+      console.error('Auth error:', error);
+      const errorMessage = getFirebaseErrorMessage(error.code);
+      setErrors({ general: errorMessage });
+    } finally {
+      setIsLoading(false); // Hide loading state
+    }
+    };
+
+    // Handle Google Sign In - much simpler than email/password
+  const handleGoogleSignIn = async (): Promise<void> => {
+    setIsGoogleLoading(true); // Show loading state
+    setErrors({}); // Clear any previous errors
+
+    try {
+      // Open the Google popup
+      const result = await signInWithPopup(auth, googleProvider);
+      console.log('Google sign-in successful:', result.user);
+      
+      // Success! Clear the form
+      setFormData({
+        name: '',
+        email: '',
+        password: '',
+        confirmPassword: ''
+      });
+      
+    } catch (error: any) {
+      // Something went wrong, show the error
+      // Note: Often this is just because user closed the popup
+      console.error('Google auth error:', error);
+      const errorMessage = getFirebaseErrorMessage(error.code);
+      setErrors({ general: errorMessage });
+    } finally {
+      setIsGoogleLoading(false); // Hide loading state
+    }
+    };
+
+    // Update form data as the user types
+    const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>): void => {
+      const { name, value } = e.target;
+      
+      // Type-safe way to update form data
+      setFormData(prev => ({ ...prev, [name]: value } as FormData));
+      
+      // Clear the error for this field when they start fixing it
+      const fieldName = name as keyof FormErrors;
+      if (errors[fieldName]) {
+        setErrors(prev => ({ ...prev, [fieldName]: undefined }));
+      }
+    };
+
+    // Switch between login and signup modes
+    const toggleMode = (): void => {
+      setIsLogin(!isLogin); // Flip the state
+      setFormData({
+        name: '',
+        email: '',
+        password: '',
+        confirmPassword: ''
+      });
+      setErrors({}); // Clear any previous errors
     };
 
     const handleMouseEnter = (e: React.MouseEvent<HTMLButtonElement>): void => {
@@ -288,10 +305,10 @@
       <div className="min-h-screen flex items-center justify-center p-4" 
           style={{ backgroundColor: '#FDFDFD' }}>
         
-        {/* Back button */}
+        {/* Go back to the previous page */}
         {onBack && (
           <button
-            onClick={onBack}
+            onClick={onBack} // Use the callback from props
             className="absolute top-6 left-6 flex items-center gap-2 text-gray-600 hover:text-gray-800 transition-colors duration-200"
           >
             <ArrowRight size={20} className="rotate-180" />

@@ -16,7 +16,7 @@ import {
 } from 'firebase/firestore';
 import { auth, db } from '../../firebase/config'; // Adjust path as needed
 
-// Interface definitions
+// My interface definitions - keeping these clean and organized makes my life easier later!
 interface MindMapPageProps {
   onBack: () => void;
 }
@@ -29,7 +29,7 @@ interface RichTextEditorProps {
   content: string;
   onChange: (content: string) => void;
   placeholder: string;
-  onEscape?: () => void;
+  onEscape?: () => void; // Optional escape handler - might need this for canceling edits
 }
 
 interface Note {
@@ -38,24 +38,24 @@ interface Note {
   content: string;
   createdAt: Date;
   updatedAt: Date;
-  userId: string;
+  userId: string; // Need this to link notes to specific users
 }
 
 interface LinearPageProps {
   onBack?: () => void;
-  onSignOut?: () => void;
+  onSignOut?: () => void; // Added this for logout functionality
 }
 
 interface SelectionMenuPosition {
   x: number;
-  y: number;
+  y: number; // Tracks where to show the floating menu
 }
 
-// Import the actual components
+// Lazy-loading these components to keep initial load time snappy
 const MindMapPage = React.lazy(() => import('./mindmap'));
 const VoiceTranscriptionPage = React.lazy(() => import('./voice_text'));
 
-// Rich Text Editor Component
+// My custom Rich Text Editor - this was tricky to build but worth it for the UX
 const RichTextEditor: React.FC<RichTextEditorProps> = ({ content, onChange, placeholder, onEscape }) => {
   const editorRef = useRef<HTMLDivElement>(null);
   const [showSelectionMenu, setShowSelectionMenu] = useState<boolean>(false);
@@ -89,7 +89,7 @@ const RichTextEditor: React.FC<RichTextEditorProps> = ({ content, onChange, plac
     }
   }, [content]);
 
-  // Check if cursor is inside a formatted span
+  // Need to check if the cursor is inside a formatted span - helps with proper editing behavior
   const checkFormattedSpanContext = (): boolean => {
     const selection = window.getSelection();
     if (!selection || selection.rangeCount === 0) return false;
@@ -110,7 +110,7 @@ const RichTextEditor: React.FC<RichTextEditorProps> = ({ content, onChange, plac
     return false;
   };
 
-  // Smart detection functions
+  // These detection functions help identify code snippets automatically - saves users from manual formatting
   const detectCodePattern = (text: string): boolean => {
     const codePatterns: RegExp[] = [
       /^(function|const|let|var|if|for|while|class|import|export)\s/,
@@ -125,6 +125,7 @@ const RichTextEditor: React.FC<RichTextEditorProps> = ({ content, onChange, plac
     return codePatterns.some((pattern: RegExp) => pattern.test(text.trim()));
   };
 
+  // Similar pattern detection for math expressions - pretty handy for my note-taking needs
   const detectMathPattern = (text: string): boolean => {
     const mathPatterns: RegExp[] = [
       /[+\-*/=<>]/,
@@ -138,6 +139,7 @@ const RichTextEditor: React.FC<RichTextEditorProps> = ({ content, onChange, plac
     return mathPatterns.some((pattern: RegExp) => pattern.test(text)) && text.length > 1;
   };
 
+  // This handles text selection and shows my custom formatting menu
   const handleSelection = (): void => {
     const selection = window.getSelection();
     if (selection && selection.rangeCount > 0 && !selection.isCollapsed) {
@@ -145,6 +147,7 @@ const RichTextEditor: React.FC<RichTextEditorProps> = ({ content, onChange, plac
       const text = selection.toString().trim();
       
       if (text.length > 0) {
+        // Position the menu above the selection - had to fiddle with these values a bit
         const rect = range.getBoundingClientRect();
         setSelectedText(text);
         setSelectedRange(range.cloneRange());
@@ -158,10 +161,11 @@ const RichTextEditor: React.FC<RichTextEditorProps> = ({ content, onChange, plac
       setShowSelectionMenu(false);
     }
 
-    // Update formatted span context
+    // Need to check if we're inside a formatted span to update UI accordingly
     setIsInFormattedSpan(checkFormattedSpanContext());
   };
 
+  // This lets users escape from formatted spans - took me a while to get this right!
   const exitFormattedSpan = (): void => {
     const selection = window.getSelection();
     if (!selection || selection.rangeCount === 0) return;
@@ -169,7 +173,7 @@ const RichTextEditor: React.FC<RichTextEditorProps> = ({ content, onChange, plac
     const range = selection.getRangeAt(0);
     let container = range.startContainer;
     
-    // Find the formatted span
+    // Need to climb up the DOM tree to find our formatted span
     let formattedSpan: Element | null = null;
     let currentElement = container.nodeType === Node.TEXT_NODE ? container.parentElement : container as Element;
     
@@ -182,12 +186,12 @@ const RichTextEditor: React.FC<RichTextEditorProps> = ({ content, onChange, plac
     }
 
     if (formattedSpan) {
-      // Create a new range after the formatted span
+      // Jump out of the formatted area and position cursor after it
       const newRange = document.createRange();
       newRange.setStartAfter(formattedSpan);
       newRange.collapse(true);
       
-      // Add space if there isn't one already
+      // Adding a space makes typing flow more naturally - small UX detail that matters
       const nextSibling = formattedSpan.nextSibling;
       if (!nextSibling || (nextSibling.nodeType === Node.TEXT_NODE && !nextSibling.textContent?.startsWith(' '))) {
         const spaceNode = document.createTextNode(' ');
@@ -203,6 +207,7 @@ const RichTextEditor: React.FC<RichTextEditorProps> = ({ content, onChange, plac
     }
   };
 
+  // This is where the magic happens for text formatting - one of my favorite features!
   const applyFormatting = (type: 'code' | 'math' | 'auto'): void => {
     if (!selectedRange) return;
 
@@ -215,16 +220,18 @@ const RichTextEditor: React.FC<RichTextEditorProps> = ({ content, onChange, plac
     let className: string;
     let icon: string;
     
+    // I've chosen these styles carefully to make different content types visually distinct
     switch (type) {
       case 'code':
         className = 'bg-gray-100 px-2 py-1 rounded font-mono text-sm border';
-        icon = '💻';
+        icon = '💻'; // Cute little code icon
         break;
       case 'math':
         className = 'bg-blue-50 px-2 py-1 rounded text-blue-800 font-serif border border-blue-200';
-        icon = '🔢';
+        icon = '🔢'; // Math icon
         break;
       case 'auto':
+        // The auto-detection is pretty smart - saves a lot of clicks!
         if (detectCodePattern(selectedText)) {
           className = 'bg-gray-100 px-2 py-1 rounded font-mono text-sm border';
           icon = '💻';
@@ -233,7 +240,7 @@ const RichTextEditor: React.FC<RichTextEditorProps> = ({ content, onChange, plac
           icon = '🔢';
         } else {
           className = 'bg-yellow-100 px-2 py-1 rounded border border-yellow-300';
-          icon = '✨';
+          icon = '✨'; // Generic highlight
         }
         break;
     }
